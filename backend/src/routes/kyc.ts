@@ -33,7 +33,7 @@ router.get('/access-token', authenticateToken, async (req: AuthRequest, res: Res
 });
 
 
-// End point ti simulate KYC completion (for testing)
+// End point to simulate KYC completion (for testing)
 router.post('/simulate-verification', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.userId;

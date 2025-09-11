@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 const generateJWT = (userId: string): string => {
     const JWT_SECRET = process.env.JWT_SECRET;
     if(!JWT_SECRET) {
-        throw new Error('JWT_SECRET is not defined in environemnt variables');
+        throw new Error('JWT_SECRET is not defined in environment variables');
     }
     return jwt.sign({ userId}, JWT_SECRET, { expiresIn: '7d'});
 }
@@ -103,7 +103,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 
         // Check if user is already verified 
         if (user.status === 'verified') {
-            return res.status(400).json({ error: 'Use is already verified.'});
+            return res.status(400).json({ error: 'User is already verified.'});
         }
 
         const otpToken = user.otpTokens[0];
@@ -134,7 +134,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         // 5. Generate JWT token 
         const token = generateJWT(user.id);
 
-        // 6. CLean up the used OTP token 
+        // 6. Clean up the used OTP token 
         await prisma.otpToken.delete({ where: { id: otpToken.id }});
 
         // 7. Respond with success and token

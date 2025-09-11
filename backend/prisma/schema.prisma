@@ -8,14 +8,16 @@ datasource db {
 }
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
+  id           String        @id @default(uuid())
+  email        String        @unique
   passwordHash String
-  status       String     @default("pending")
+  status       String        @default("pending")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   kycStatus    String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
   otpTokens    OtpToken[]
+  recipients   Recipient[]
+  transactions Transaction[]
 }
 
 model OtpToken {
@@ -26,4 +28,44 @@ model OtpToken {
   createdAt DateTime @default(now())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Transaction {
+  id                String            @id @default(uuid())
+  cadAmount         Float
+  fee               Float
+  exchangeRate      Float
+  ugxAmount         Float
+  status            TransactionStatus @default(DRAFT)
+  stripePaymentId   String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  userId            String
+  recipientId       String
+  provider          String?
+  providerPayoutRef String?
+  providerRaw       Json?
+  recipient         Recipient         @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Recipient {
+  id           String        @id @default(uuid())
+  name         String
+  phoneNumber  String
+  network      String
+  createdAt    DateTime      @default(now())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+}
+
+enum TransactionStatus {
+  DRAFT
+  PAYMENT_PENDING
+  FUNDED
+  PAYOUT_PENDING
+  COMPLETED
+  PAYOUT_FAILED
+  FAILED
 }
