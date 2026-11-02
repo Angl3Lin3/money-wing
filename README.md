@@ -2,9 +2,9 @@
 
 A mobile app for sending money from **Canada (CAD)** to **Uganda (UGX)**. Customers pay by card, and the money is delivered to the recipient's **MTN or Airtel Mobile Money** wallet.
 
-This is a fork of the original MoneyWing project, which we are continuing as students for a small business. This README explains how to run the app and **everything that has been added since the original version**.
+This is a fork of the original MoneyWing project. This README explains how to run the app and **everything that has been added since the original version**.
 
-> **Status:** working demo. You can sign up, add recipients, get a quote, and create a transfer. **Card payment (Stripe) and real payouts are not connected yet**, so no real money moves.
+> **Status:** working demo. You can sign up, add recipients, get a quote, and create a transfer. **Card payment and real payouts are not connected yet**, so no real money moves.
 
 ---
 
@@ -121,7 +121,7 @@ The original backend could not start on a normal computer.
 - **Log out** button on the dashboard.
 - **Resend code** button on the verify screen.
 - **Unverified emails can sign up again.** Before, a failed signup locked that email address forever ("already exists").
-- **Emails are not case-sensitive** (`Angel@Test.com` = `angel@test.com`).
+- **Emails are not case-sensitive** (`Email@Test.com` = `email@test.com`).
 - **Safer codes:** 6-digit codes now use a secure random generator.
 - **Show / Hide button** on password fields.
 - **Error messages show up in the browser.** React Native's popups don't work on web, so errors used to disappear silently.
@@ -137,7 +137,7 @@ Screens: **Recipients** (list) and **Add Recipient**.
 - **Delete** a recipient. Blocked if they already have transfers, because deleting them would also delete those money records.
 - **Send** button on each recipient jumps straight to Send Money with them selected.
 
-> ⚠️ **Confirm with the owner:** network prefixes are set to MTN = 076/077/078 and Airtel = 070/074/075 in `backend/src/utils/phone.ts`.
+> ⚠️ **Confirm:** network prefixes are set to MTN = 076/077/078 and Airtel = 070/074/075 in `backend/src/utils/phone.ts`.
 
 ### 4. Send money: amount and quote
 
@@ -150,7 +150,7 @@ Screen: **Send Money**.
 - **Money maths is done in cents**, so there are no rounding errors like `$1.9999999`. UGX amounts are whole shillings.
 - **Amounts are validated:** no letters, negatives, or more than 2 decimals, and the minimum and maximum limits are applied.
 
-> ⚠️ **Confirm with the owner:** the rate (2,800 UGX per CAD), fee (2%) and limits ($5 to $3,000) are placeholders.
+> ⚠️ **Confirm:** the rate (2,800 UGX per CAD), fee (2%) and limits ($5 to $3,000) are placeholders.
 
 ### 5. Review, confirm and transfer details
 
@@ -320,7 +320,7 @@ With the app running:
 
 ## Not done yet
 
-- **Card payment (Stripe)** in the app: the backend endpoint exists, but the app's Pay button is disabled. *Next step.*
+- **Card payment** in the app: the backend endpoint exists, but the app's Pay button is disabled. *Next step.*
 - **Real emails** for signup codes. They only appear in the Terminal.
 - **Forgot password.**
 - **Real payouts** (Flutterwave). Payouts are simulated.
