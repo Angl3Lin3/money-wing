@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
 import { userAPI } from "../services/api";
 import { clearToken } from "../services/auth-storage";
-import { showAlert } from "../services/alert";
 
 export default function DashboardScreen() {
     const [email, setEmail] = useState<string | null>(null);
@@ -40,8 +39,8 @@ export default function DashboardScreen() {
             {email && <Text style={styles.subtitle}>Signed in as {email}</Text>}
 
             <Button
-             title="Start Sending Money"
-             onPress={() => showAlert('Coming next', 'The send-money flow is the next thing to build.')}
+             title="Send Money"
+             onPress={() => router.push('/send')}
             />
             <View style={{ height: 12 }} />
             <Button title="Recipients" onPress={() => router.push('/recipients')} />

@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { normalizeUgandaPhone, networkForPhone, VALID_NETWORKS } from '../utils/phone';
+import { calculateQuote, QuoteError } from '../services/pricing.service';
 
 
 
@@ -13,28 +14,11 @@ const stripeService = new StripeService();
 // Endpoint-> "Get a quote for sending money"
 router.get('/quote', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
-        const { cadAmount } = req.query;
-        const amount = parseFloat(cadAmount as string);
-
-        if(!amount || amount <= 0) {
-            return res.status(400).json({ error: 'Valid CAD amount required'});
-        }
-
-        // TODO: Replace with real exchange rate API
-        const EXCHANGE_RATE = 2800; // 1 CAD = 2800 UGX
-        const FEE_PERCENTAGE = 0.02; // 2% fee
-
-        const fee = amount * FEE_PERCENTAGE;
-        const ugxAmount = (amount - fee) * EXCHANGE_RATE;
-
-        res.status(200).json({
-            cadAmount: amount,
-            fee: fee,
-            exchangeRate: EXCHANGE_RATE,
-            ugxAmount: ugxAmount,
-            expiresIn: 300 // Quote expires in 5 minutes
-        });
+        res.status(200).json(calculateQuote(req.query.cadAmount));
     } catch (error: any) {
+        if (error instanceof QuoteError) {
+            return res.status(400).json({ error: error.message });
+        }
         console.error('Quote error:', error);
         res.status(500).json({ error: 'Failed to generate quote'});
     }
@@ -181,7 +165,17 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         if(!cadAmount || !recipientId) {
             return res.status(400).json({ error: 'Amount and recipient ID are required'});
         }
-        const amount = parseFloat(cadAmount);
+
+        // Same calculation as GET /quote (also validates the amount)
+        let quote;
+        try {
+            quote = calculateQuote(cadAmount);
+        } catch (error: any) {
+            if (error instanceof QuoteError) {
+                return res.status(400).json({ error: error.message });
+            }
+            throw error;
+        }
 
         // Validate recipient belongs to user 
         const recipient = await prisma.recipient.findFirst({
@@ -195,19 +189,13 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
             return res.status(404).json({error: 'Recipient not found'});
         }
 
-        // Calculate quote (same logic as GET/quote)
-        const EXCHANGE_RATE = 2800;
-        const FEE_PERCENTAGE = 0.02;
-        const fee = amount * FEE_PERCENTAGE;
-        const ugxAmount = (amount - fee) * EXCHANGE_RATE;
-
         // Create transaction record
         const transaction = await prisma.transaction.create({
             data: {
-                cadAmount: amount,
-                fee: fee,
-                exchangeRate: EXCHANGE_RATE,
-                ugxAmount: ugxAmount,
+                cadAmount: quote.cadAmount,
+                fee: quote.fee,
+                exchangeRate: quote.exchangeRate,
+                ugxAmount: quote.ugxAmount,
                 status: 'DRAFT',
                 user: {connect: { id: userId}},
                 recipient: { connect: { id: recipientId}}

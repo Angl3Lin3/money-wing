@@ -131,3 +131,19 @@ export const recipientAPI = {
     await api.delete(`/transaction/recipients/${id}`);
   },
 };
+
+// Quotes: how much the recipient gets for a CAD amount
+export interface Quote {
+  cadAmount: number;
+  fee: number;
+  exchangeRate: number;
+  ugxAmount: number;
+  expiresIn: number;
+}
+
+export const quoteAPI = {
+  get: async (cadAmount: string): Promise<Quote> => {
+    const response = await api.get('/transaction/quote', { params: { cadAmount } });
+    return response.data;
+  },
+};
