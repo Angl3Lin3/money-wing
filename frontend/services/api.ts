@@ -185,6 +185,12 @@ export const transactionAPI = {
     return response.data.transaction;
   },
 
+  // Newest first. Pass the oldest loaded date as `before` to get the next page.
+  list: async (before?: string): Promise<{ transactions: Transaction[]; hasMore: boolean }> => {
+    const response = await api.get('/transaction', { params: { limit: 20, ...(before && { before }) } });
+    return response.data;
+  },
+
   get: async (id: string): Promise<Transaction> => {
     const response = await api.get(`/transaction/${id}`);
     return response.data.transaction;

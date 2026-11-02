@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { AppButton, Caption, Card, Loading, Screen, Spacer } from "../components/ui";
+import { AppButton, Card, Loading, Screen, Spacer } from "../components/ui";
 import { formatUgx } from "../constants/format";
 import { colors, fonts, fontSize, radius, shadow, spacing } from "../constants/theme";
 import { quoteAPI, userAPI } from "../services/api";
@@ -60,11 +60,12 @@ export default function DashboardScreen() {
 
             <Card style={styles.menuCard}>
                 <MenuItem icon="👥" title="Recipients" subtitle="People you send money to" onPress={() => router.push("/recipients")} />
+                <View style={styles.menuDivider} />
+                <MenuItem icon="🧾" title="Transfer history" subtitle="See all your transfers and their status" onPress={() => router.push("/history")} />
             </Card>
 
             <Spacer size={spacing.sm} />
             <AppButton title="Log out" variant="ghost" onPress={logout} />
-            <Caption center style={{ marginTop: spacing.sm }}>Transfer history is coming soon.</Caption>
         </Screen>
     );
 }
@@ -114,6 +115,7 @@ const styles = StyleSheet.create({
     sendTitle: { fontFamily: fonts.bold, fontSize: fontSize.xl, color: "#fff" },
     sendText: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: "#ffe2d4", marginTop: 2 },
     menuCard: { paddingVertical: spacing.sm },
+    menuDivider: { height: 1, backgroundColor: colors.border },
     menuItem: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md },
     menuIcon: {
         width: 44, height: 44, borderRadius: 22,

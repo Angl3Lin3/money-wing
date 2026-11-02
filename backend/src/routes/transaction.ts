@@ -327,6 +327,39 @@ router.post('/:id/payment-intent', authenticateToken, async( req: AuthRequest, r
 });
 
 
+// Endpoint -> List the user's transfers (newest first)
+// Optional: ?limit=20&before=<ISO date> to load older pages.
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        if(!userId) {
+            return res.status(401).json({ error: 'User not authenticated'});
+        }
+
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100);
+        const before = req.query.before ? new Date(String(req.query.before)) : null;
+        if (before && isNaN(before.getTime())) {
+            return res.status(400).json({ error: 'Invalid "before" date'});
+        }
+
+        const transactions = await prisma.transaction.findMany({
+            where: { userId, ...(before && { createdAt: { lt: before } }) },
+            include: { recipient: { select: { name: true, phoneNumber: true, network: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: limit + 1 // one extra tells us whether there are more
+        });
+
+        const hasMore = transactions.length > limit;
+        res.status(200).json({
+            transactions: transactions.slice(0, limit).map(serializeTransaction),
+            hasMore
+        });
+    } catch(error: any) {
+        console.error('List transactions error:', error);
+        res.status(500).json({ error: 'Failed to fetch transactions'});
+    }
+});
+
 // Endpoint -> Get one of the user's transfers
 router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
