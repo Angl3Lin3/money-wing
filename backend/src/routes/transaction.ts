@@ -2,6 +2,7 @@ import { StripeService } from './../services/stripe.service';
 import express, { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { normalizeUgandaPhone, networkForPhone, VALID_NETWORKS } from '../utils/phone';
 
 
 
@@ -49,21 +50,40 @@ router.post('/recipients', authenticateToken, async (req: AuthRequest, res: Resp
             return res.status(401).json({ error: 'User not authenticated'});
         }
 
-        if(!name || !phoneNumber || !network) {
+        const trimmedName = typeof name === 'string' ? name.trim() : '';
+        if(!trimmedName || !phoneNumber || !network) {
             return res.status(400).json({ error: 'Name, phone number, and network are required'});
         }
 
         // Validate network 
-        const validNetworks = ['MTN', 'Airtel'];
-        if(!validNetworks.includes(network)) {
-           return res.status(400).json({ error: 'Netowrk must be MTN or Airtel'});
+        if(!VALID_NETWORKS.includes(network)) {
+           return res.status(400).json({ error: 'Network must be MTN or Airtel'});
+        }
+
+        // Validate the number and store it in one standard format (+256...)
+        const normalizedPhone = normalizeUgandaPhone(phoneNumber);
+        if(!normalizedPhone) {
+            return res.status(400).json({ error: 'Enter a valid Ugandan mobile number, e.g. 0772 123 456'});
+        }
+
+        const detectedNetwork = networkForPhone(normalizedPhone);
+        if(detectedNetwork && detectedNetwork !== network) {
+            return res.status(400).json({ error: `That number looks like ${detectedNetwork}, not ${network}. Please check the network.`});
+        }
+
+        // Don't save the same person twice
+        const duplicate = await prisma.recipient.findFirst({
+            where: { userId, phoneNumber: normalizedPhone }
+        });
+        if(duplicate) {
+            return res.status(400).json({ error: `You already have a recipient with this number (${duplicate.name}).`});
         }
 
         // Create recipient 
         const recipient = await prisma.recipient.create({
             data: {
-                name,
-                phoneNumber,
+                name: trimmedName,
+                phoneNumber: normalizedPhone,
                 network,
                 user: { connect: { id: userId}}
             }
@@ -95,6 +115,7 @@ router.get('/recipients', authenticateToken, async (req: AuthRequest, res: Respo
 
         const recipients = await prisma.recipient.findMany({
             where: {userId},
+            orderBy: { createdAt: 'desc' },
             select: {
                 id: true,
                 name: true,
@@ -108,6 +129,42 @@ router.get('/recipients', authenticateToken, async (req: AuthRequest, res: Respo
     } catch(error: any) {
         console.error('Get recipients error:', error);
         res.status(500).json({ error: 'Failed to fetch recipients'});
+    }
+});
+
+// Endpoint-> "Remove a recipient"
+router.delete('/recipients/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        if(!userId) {
+            return res.status(401).json({ error: 'User not authenticated'});
+        }
+
+        const recipientId = req.params.id;
+        if(!recipientId) {
+            return res.status(400).json({ error: 'Recipient id is required'});
+        }
+
+        // Only the owner can delete their recipient
+        const recipient = await prisma.recipient.findFirst({
+            where: { id: recipientId, userId },
+            include: { _count: { select: { transactions: true } } }
+        });
+        if(!recipient) {
+            return res.status(404).json({ error: 'Recipient not found'});
+        }
+
+        // Deleting a recipient would also delete their transfers (the database
+        // cascades), and money records must be kept. So block it.
+        if(recipient._count.transactions > 0) {
+            return res.status(400).json({ error: 'This recipient has transfers on record and cannot be deleted.'});
+        }
+
+        await prisma.recipient.delete({ where: { id: recipient.id } });
+        res.status(200).json({ message: 'Recipient deleted' });
+    } catch(error: any) {
+        console.error('Delete recipient error:', error);
+        res.status(500).json({ error: 'Failed to delete recipient'});
     }
 });
 

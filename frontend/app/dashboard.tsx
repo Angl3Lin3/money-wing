@@ -44,6 +44,8 @@ export default function DashboardScreen() {
              onPress={() => showAlert('Coming next', 'The send-money flow is the next thing to build.')}
             />
             <View style={{ height: 12 }} />
+            <Button title="Recipients" onPress={() => router.push('/recipients')} />
+            <View style={{ height: 12 }} />
             <Button title="Log Out" onPress={logout} color="#666" />
         </View>
     )

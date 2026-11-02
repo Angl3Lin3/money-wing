@@ -104,3 +104,30 @@ export const getErrorMessage = (error: any, fallback = 'Something went wrong'): 
   }
   return fallback;
 };
+
+// Recipients (people in Uganda the user sends money to)
+export type Network = 'MTN' | 'Airtel';
+
+export interface Recipient {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  network: Network;
+  createdAt?: string;
+}
+
+export const recipientAPI = {
+  list: async (): Promise<Recipient[]> => {
+    const response = await api.get('/transaction/recipients');
+    return response.data.recipients;
+  },
+
+  add: async (name: string, phoneNumber: string, network: Network): Promise<Recipient> => {
+    const response = await api.post('/transaction/recipients', { name, phoneNumber, network });
+    return response.data.recipient;
+  },
+
+  remove: async (id: string): Promise<void> => {
+    await api.delete(`/transaction/recipients/${id}`);
+  },
+};

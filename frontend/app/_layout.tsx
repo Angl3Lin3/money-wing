@@ -1,36 +1,38 @@
-
 import { Stack } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-
-
+import { BackButton, HomeButton } from '../components/HeaderNav';
 
 export default function RootLayout() {
-
-
   return (
     <View style={styles.container}>
       <Stack
-       screenOptions={{
+       screenOptions={({ navigation }) => ({
         headerStyle: {
           backgroundColor: '#1E40AF',
         },
         headerTintColor: '#fff',
         headerTitleStyle: {
           fontWeight: 'bold',
-        }
-       }}
+        },
+        // Home on the right of every screen; Back on the left when there's somewhere to go back to.
+        headerLeft: () => <BackButton canGoBack={navigation.canGoBack()} />,
+        headerRight: () => <HomeButton />,
+       })}
       >
-       <Stack.Screen name="index" options={{ title: 'MoneyWing'}}/>
+       {/* Start screens: Home only (nothing to go back to) */}
+       <Stack.Screen name="index" options={{ title: 'MoneyWing', headerLeft: () => null }}/>
+       <Stack.Screen name="dashboard" options={{ title: 'Dashboard', headerLeft: () => null }}/>
+
        <Stack.Screen name="signup" options={{ title: 'Create Account' }}/>
        <Stack.Screen name="login" options={{ title: 'Log In' }}/>
        <Stack.Screen name="otp" options={{ title: 'Verify OTP'}}/>
-       <Stack.Screen name="dashboard" options={{ title: 'Dashboard', headerLeft: () => null }}/>
-
+       <Stack.Screen name="recipients" options={{ title: 'Recipients' }}/>
+       <Stack.Screen name="add-recipient" options={{ title: 'Add Recipient' }}/>
+       <Stack.Screen name="api-test" options={{ title: 'API Test' }}/>
       </Stack>
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -38,5 +40,3 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
 });
-
-
