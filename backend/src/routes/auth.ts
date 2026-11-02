@@ -2,6 +2,7 @@
 import express, { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
 const router = express.Router();
@@ -16,51 +17,60 @@ const generateJWT = (userId: string): string => {
 
 // Generate a random 6-digit OTP
 const generateOTP = (): string => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
+};
+
+const normalizeEmail = (email: unknown): string =>
+  typeof email === 'string' ? email.trim().toLowerCase() : '';
+
+// Replace any old codes for this user with a fresh one.
+// For now the code is printed in the server terminal (no email service yet).
+const issueOtp = async (userId: string, email: string): Promise<void> => {
+  const otpCode = generateOTP();
+  const otpHash = await bcrypt.hash(otpCode, 8);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+  await prisma.otpToken.deleteMany({ where: { userId, purpose: 'signup' } });
+  await prisma.otpToken.create({
+    data: {
+      tokenHash: otpHash,
+      expiresAt,
+      user: { connect: { id: userId } },
+    },
+  });
+
+  console.log(`💸 MoneyWing Signup OTP for ${email}: ${otpCode}`);
+  console.log(`⏰ OTP expires at: ${expiresAt.toLocaleTimeString()}`);
 };
 
 router.post('/signup', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const { password } = req.body;
 
     // Validate input
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // 1. Hash password
     const passwordHash = await bcrypt.hash(password, 12);
+    const existing = await prisma.user.findUnique({ where: { email } });
 
-    // 2. Create user in DB
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        status: 'pending', // Waiting for OTP verification
-      },
-    });
+    if (existing && existing.status === 'verified') {
+      return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
+    }
 
-    // 3. GENERATE OTP
-    const otpCode = generateOTP();
-    const otpHash = await bcrypt.hash(otpCode, 8);
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+    // An account that was never verified can sign up again: update the
+    // password and send a new code instead of locking the email forever.
+    const user = existing
+      ? await prisma.user.update({ where: { id: existing.id }, data: { passwordHash } })
+      : await prisma.user.create({ data: { email, passwordHash, status: 'pending' } });
 
-    await prisma.otpToken.create({
-      data: {
-        tokenHash: otpHash,
-        expiresAt,
-        user: { connect: { id: user.id } },
-      },
-    });
+    await issueOtp(user.id, email);
 
-    // 4. "Send" OTP by logging to console
-    console.log(`💸 MoneyWing Signup OTP for ${email}: ${otpCode}`);
-    console.log(`⏰ OTP expires at: ${expiresAt.toLocaleTimeString()}`);
-
-    // 5. Respond to client
-    res.status(201).json({ 
-      message: 'User created successfully. OTP sent to email.', 
-      userId: user.id 
+    res.status(201).json({
+      message: 'User created successfully. OTP sent to email.',
+      userId: user.id
     });
 
   } catch (error: any) {
@@ -75,12 +85,36 @@ router.post('/signup', async (req: Request, res: Response) => {
   }
 });
 
+// Send a new code when the old one expired or was lost.
+router.post('/resend-otp', async (req: Request, res: Response) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(400).json({ error: 'User not found.' });
+    }
+    if (user.status === 'verified') {
+      return res.status(400).json({ error: 'User is already verified. Please log in.' });
+    }
+
+    await issueOtp(user.id, email);
+    res.status(200).json({ message: 'A new code has been sent.' });
+  } catch (error: any) {
+    console.error('Resend OTP error:', error);
+    res.status(500).json({ error: 'Internal server error while resending code' });
+  }
+});
+
 
 router.post('/verify-otp', async (req: Request, res: Response) => {
- console.log("✅ /auth/test-verify route was hit!");
 
     try {
-        const {email, otpCode} = req.body;
+        const email = normalizeEmail(req.body.email);
+        const otpCode = typeof req.body.otpCode === 'string' ? req.body.otpCode.trim() : '';
         // Validate input 
         if(!email || !otpCode) {
             return res.status(400).json({ error: 'Email and OTP code are required'});
@@ -116,7 +150,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         if (new Date() > otpToken.expiresAt) {
             // Clean up expired token 
             await prisma.otpToken.delete({ where: {id: otpToken.id } });
-            return res.status(400).json({ error: 'OPT has expired. Please request a new one.'});
+            return res.status(400).json({ error: 'Code has expired. Please request a new one.'});
         }
 
         // 3. Validate OTP code 
@@ -158,8 +192,8 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 
 router.post('/login', async (req: Request, res: Response) => {
     try {
-        console.log("/auth/login route was hit!");
-        const { email, password } = req.body;
+        const email = normalizeEmail(req.body.email);
+        const { password } = req.body;
 
         // Validate input 
         if (!email || !password) {

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../app/constants/config';
+import { getToken } from './auth-storage';
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -12,12 +13,12 @@ const api = axios.create({
 
 // Request interceptor to add auth token
 api.interceptors.request.use(
-  (config) => {
-    // You can add token here later when implementing secure storage
-    // const token = await SecureStore.getItemAsync('authToken');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+  async (config) => {
+    // Attach the saved login token so the server knows who we are.
+    const token = await getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -38,6 +39,11 @@ api.interceptors.response.use(
 export const authAPI = {
   signup: async (email: string, password: string) => {
     const response = await api.post('/auth/signup', { email, password });
+    return response.data;
+  },
+
+  resendOTP: async (email: string) => {
+    const response = await api.post('/auth/resend-otp', { email });
     return response.data;
   },
 
@@ -89,3 +95,12 @@ export const healthCheck = async () => {
 };
 
 export default api;
+
+// Turns an API/network error into a message worth showing the user.
+export const getErrorMessage = (error: any, fallback = 'Something went wrong'): string => {
+  if (error?.response?.data?.error) return error.response.data.error;
+  if (error?.code === 'ECONNABORTED' || error?.message === 'Network Error') {
+    return `Can't reach the server at ${API_BASE_URL}. Is the backend running?`;
+  }
+  return fallback;
+};

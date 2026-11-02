@@ -2,15 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/user';
 import kycRoutes from './routes/kyc';
 import transactionRoutes from './routes/transaction';
 import webhookRoutes from './routes/webhooks';
 // import adminRoutes from './routes/admin';
-// Load environment variables 
-dotenv.config();
 
 const app = express();
 
@@ -26,6 +23,11 @@ app.use('/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
 
 // Regular JSON parsing for most routes
 app.use(express.json());
+
+// Health check (used by the app's "Test API Connection" screen)
+app.get('/', (_req, res) => {
+    res.json({ status: 'ok', service: 'moneywing-api' });
+});
 
 // Routes 
 app.use('/auth', authRoutes); // Add this line

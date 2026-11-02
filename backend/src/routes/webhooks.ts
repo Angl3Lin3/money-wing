@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
 
 if(!webhookSecret) {
-    throw new Error('STRIPE_WEBHOOK_SECRET is not defined in environment variables');
+    console.warn('⚠️  STRIPE_WEBHOOK_SECRET is not set. Stripe webhooks will be rejected.');
 }
 
 
@@ -19,6 +19,10 @@ if(!webhookSecret) {
 router.post('/stripe', async (req: Request, res: Response) => {
 
     try {
+        if(!webhookSecret) {
+            return res.status(500).json({ error: 'Stripe webhooks are not configured on this server'});
+        }
+
         const sig = req.headers['stripe-signature'] as string;
 
         if(!sig) {

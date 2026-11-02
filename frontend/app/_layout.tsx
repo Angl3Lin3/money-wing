@@ -22,6 +22,7 @@ export default function RootLayout() {
       >
        <Stack.Screen name="index" options={{ title: 'MoneyWing'}}/>
        <Stack.Screen name="signup" options={{ title: 'Create Account' }}/>
+       <Stack.Screen name="login" options={{ title: 'Log In' }}/>
        <Stack.Screen name="otp" options={{ title: 'Verify OTP'}}/>
        <Stack.Screen name="dashboard" options={{ title: 'Dashboard', headerLeft: () => null }}/>
 

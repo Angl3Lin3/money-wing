@@ -2,11 +2,12 @@ import Stripe from 'stripe';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
+// Warn instead of crashing, so signup/login work before Stripe is set up.
 if(!stripeSecretKey) {
-    throw new Error('STRIPE_SECRET_KEY is not defined');
+    console.warn('⚠️  STRIPE_SECRET_KEY is not set. Payment endpoints will fail.');
 }
 
-export const stripe = new Stripe(stripeSecretKey)
+export const stripe = new Stripe(stripeSecretKey || 'sk_test_not_configured')
 
 export class StripeService {
     async createPaymentIntent(amount: number, currency: string = 'cad') {

@@ -1,7 +1,9 @@
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import { useState } from "react";
-import { Alert, Button, StyleSheet, Text, TextInput, View } from "react-native";
-import { authAPI } from "../services/api";
+import { Button, StyleSheet, Text, TextInput, View } from "react-native";
+import { authAPI, getErrorMessage } from "../services/api";
+import { showAlert } from "../services/alert";
+import PasswordInput from "../components/PasswordInput";
 
 export default function SignUpScreen() {
   const [email, setEmail] = useState("");
@@ -10,17 +12,16 @@ export default function SignUpScreen() {
 
   const handleSignUp = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showAlert('Error', 'Please fill in all fields');
       return;
     }
 
     setLoading(true);
     try {
-      await authAPI.signup(email, password);
-      Alert.alert('Success', 'OTP sent to your email!');
-      router.push({ pathname: '/otp', params: {email} });
+      await authAPI.signup(email.trim(), password);
+      router.push({ pathname: '/otp', params: { email: email.trim() } });
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.error || 'Signup failed');
+      showAlert('Error', getErrorMessage(error, 'Signup failed'));
     } finally {
       setLoading(false);
     }
@@ -39,15 +40,14 @@ export default function SignUpScreen() {
         keyboardType="email-address"
       />
 
-      <TextInput
-        style={styles.input}
+      <PasswordInput
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
       />
 
-      <Button title="Sign Up" onPress={handleSignUp} />
+      <Button title={loading ? "Creating account..." : "Sign Up"} onPress={handleSignUp} disabled={loading} />
+      <Link href="/login" style={styles.backLink}>Already have an account? Log in</Link>
   
     </View>
   );

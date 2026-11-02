@@ -1,7 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
     Button,
     Keyboard,
     KeyboardAvoidingView,
@@ -12,28 +11,44 @@ import {
     TouchableWithoutFeedback,
     View
 } from "react-native";
-import { authAPI } from "../services/api";
+import { authAPI, getErrorMessage } from "../services/api";
+import { saveToken } from "../services/auth-storage";
+import { showAlert } from "../services/alert";
 
 export default function OTPScreen() {
     const [otp, setOtp] = useState('');
     const [loading, setLoading] = useState(false);
     const params = useLocalSearchParams();
     const email = params.email as string;
+    const [resending, setResending] = useState(false);
+
+    const resendOtp = async () => {
+        setResending(true);
+        try {
+            await authAPI.resendOTP(email);
+            showAlert('Code sent', 'A new code is on its way.');
+        } catch (error: any) {
+            showAlert('Error', getErrorMessage(error, 'Could not resend the code'));
+        } finally {
+            setResending(false);
+        }
+    };
 
     const verifyOtp = async () => {
         if (!otp || otp.length !== 6) {
-            Alert.alert('Error', 'Please enter a valid 6-digit OTP');
+            showAlert('Error', 'Please enter a valid 6-digit OTP');
             return;
         }
 
         setLoading(true);
         try {
-            await authAPI.verifyOTP(email, otp);
+            const result = await authAPI.verifyOTP(email, otp);
+            await saveToken(result.token); // stay logged in
             // SUCCESS: Navigate immediately to dashboard
             router.replace('/dashboard');
         } catch (error: any) {
             // ERROR: Show alert only on failure
-            Alert.alert('Error', error.response?.data?.error || 'Verification failed');
+            showAlert('Error', getErrorMessage(error, 'Verification failed'));
         } finally {
             setLoading(false);
         }
@@ -65,6 +80,13 @@ export default function OTPScreen() {
                             title={loading ? "Verifying..." : "Verify OTP"} 
                             onPress={verifyOtp}
                             disabled={loading}
+                        />
+                        <View style={{ height: 10 }} />
+                        <Button
+                            title={resending ? "Sending..." : "Resend code"}
+                            onPress={resendOtp}
+                            disabled={resending}
+                            color="#666"
                         />
                     </View>
                 </View>

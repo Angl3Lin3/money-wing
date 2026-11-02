@@ -1,7 +1,29 @@
-import { Link } from "expo-router";
-import { Button, StyleSheet, Text, View } from "react-native";
+import { Link, Redirect } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
+import { getToken } from "../services/auth-storage";
 
 export default function WelcomeScreen() {
+  // Skip this screen if the user is already logged in.
+  const [status, setStatus] = useState<"checking" | "loggedIn" | "loggedOut">("checking");
+
+  useEffect(() => {
+    getToken()
+      .then((token) => setStatus(token ? "loggedIn" : "loggedOut"))
+      .catch(() => setStatus("loggedOut"));
+  }, []);
+
+  if (status === "checking") {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+  if (status === "loggedIn") {
+    return <Redirect href="/dashboard" />;
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to MoneyWing</Text>
@@ -11,11 +33,9 @@ export default function WelcomeScreen() {
         <Link href="/signup" asChild>
           <Button title="Create Account" />
         </Link>
-        <Button
-          title="Login"
-          onPress={() => alert("Login screen coming soon!")}
-          color="#666"
-        />
+        <Link href="/login" asChild>
+          <Button title="Login" color="#666" />
+        </Link>
         <Link href="/api-test" asChild>
           <Button title="Test API Connection" color="#28a745" />
         </Link>
