@@ -1,8 +1,11 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Button, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import RecipientAvatar from "../components/RecipientAvatar";
+import { AppButton, Body, Caption, Card, DetailRow, Divider, Loading, Notice, Screen, SectionLabel, Title } from "../components/ui";
 import { formatCad, formatUgx } from "../constants/format";
 import { formatPhone } from "../constants/networks";
+import { colors, fonts, fontSize, radius, spacing } from "../constants/theme";
 import { showAlert } from "../services/alert";
 import { getErrorMessage, Quote, quoteAPI, Recipient, recipientAPI, transactionAPI } from "../services/api";
 
@@ -53,75 +56,55 @@ export default function ReviewScreen() {
 
   if (loadError) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{loadError}</Text>
-        <Button title="Back to Send Money" onPress={() => router.replace("/send")} />
-      </View>
+      <Screen center>
+        <Notice tone="danger">{loadError}</Notice>
+        <AppButton title="Back to Send Money" variant="secondary" onPress={() => router.replace("/send")} />
+      </Screen>
     );
   }
 
-  if (!recipient || !quote) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
+  if (!recipient || !quote) return <Loading />;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Check the details</Text>
+    <Screen>
+      <Title>Check the details</Title>
+      <Body style={{ marginBottom: spacing.lg }}>Make sure everything is right before you confirm.</Body>
 
-      {priceChanged && (
-        <View style={styles.warning}>
-          <Text style={styles.warningText}>The amounts below were updated. Please check them again.</Text>
+      {priceChanged && <Notice tone="warning">The amounts below were updated. Please check them again.</Notice>}
+
+      <SectionLabel>Recipient</SectionLabel>
+      <Card style={styles.recipientCard}>
+        <RecipientAvatar name={recipient.name} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{recipient.name}</Text>
+          <Text style={styles.detail}>{formatPhone(recipient.phoneNumber)}</Text>
+          <Text style={styles.detail}>{recipient.network} Mobile Money</Text>
         </View>
-      )}
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Recipient</Text>
-        <Row label="Name" value={recipient.name} />
-        <Row label="Mobile number" value={formatPhone(recipient.phoneNumber)} />
-        <Row label="Network" value={`${recipient.network} Mobile Money`} />
-      </View>
+      <SectionLabel>Amount</SectionLabel>
+      <Card>
+        <DetailRow label="You pay" value={formatCad(quote.cadAmount)} />
+        <DetailRow label="Fee (included)" value={formatCad(quote.fee)} />
+        <DetailRow label="Exchange rate" value={`1 CAD = ${formatUgx(quote.exchangeRate)}`} />
+        <Divider />
+        <View style={styles.receive}>
+          <Text style={styles.receiveLabel}>{recipient.name} receives</Text>
+          <Text style={styles.receiveAmount}>{formatUgx(quote.ugxAmount)}</Text>
+        </View>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Amount</Text>
-        <Row label="You pay" value={formatCad(quote.cadAmount)} />
-        <Row label="Fee (included)" value={formatCad(quote.fee)} />
-        <Row label="Exchange rate" value={`1 CAD = ${formatUgx(quote.exchangeRate)}`} />
-        <View style={styles.divider} />
-        <Row label={`${recipient.name} receives`} value={formatUgx(quote.ugxAmount)} bold />
-      </View>
-
-      <Button title={confirming ? "Creating transfer..." : "Confirm"} onPress={confirm} disabled={confirming} />
-      <Text style={styles.note}>You&apos;ll pay by card in the next step.</Text>
-    </ScrollView>
-  );
-}
-
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <View style={styles.row}>
-      <Text style={[styles.label, bold && styles.bold]}>{label}</Text>
-      <Text style={[styles.value, bold && styles.bold]}>{value}</Text>
-    </View>
+      <AppButton title="Confirm" onPress={confirm} loading={confirming} />
+      <Caption center style={{ marginTop: spacing.sm }}>You&apos;ll pay by card in the next step.</Caption>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: "#fff", flexGrow: 1 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, gap: 12 },
-  heading: { fontSize: 22, fontWeight: "bold", marginBottom: 12 },
-  card: { borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 14, marginBottom: 14 },
-  cardTitle: { fontWeight: "bold", color: "#6B7280", marginBottom: 6, textTransform: "uppercase", fontSize: 12 },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, gap: 12 },
-  label: { color: "#4B5563" },
-  value: { color: "#111827", flexShrink: 1, textAlign: "right" },
-  bold: { fontWeight: "bold", fontSize: 16, color: "#111827" },
-  divider: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 6 },
-  warning: { backgroundColor: "#FEF3C7", padding: 12, borderRadius: 8, marginBottom: 12 },
-  warningText: { color: "#92400E" },
-  note: { color: "#666", textAlign: "center", marginTop: 10 },
-  errorText: { color: "#B91C1C", textAlign: "center" },
+  recipientCard: { flexDirection: "row", alignItems: "center", gap: spacing.lg },
+  name: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.text },
+  detail: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, marginTop: 2 },
+  receive: { marginTop: spacing.sm, backgroundColor: colors.primarySoft, borderRadius: radius.row, padding: spacing.lg },
+  receiveLabel: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.primary },
+  receiveAmount: { fontFamily: fonts.bold, fontSize: fontSize["2xl"], color: colors.text, marginTop: 2 },
 });

@@ -1,7 +1,9 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Button, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AppButton, Card, Screen, Subtitle, TextField, Title } from "../components/ui";
 import { guessNetwork } from "../constants/networks";
+import { colors, fonts, fontSize, radius, spacing } from "../constants/theme";
 import { showAlert } from "../services/alert";
 import { getErrorMessage, Network, recipientAPI } from "../services/api";
 
@@ -29,8 +31,8 @@ export default function AddRecipientScreen() {
     setSaving(true);
     try {
       await recipientAPI.add(name.trim(), phone, network);
-      // Back to the list (it reloads when shown). If this screen was opened
-      // directly, there's nothing to go back to, so open the list instead.
+      // Back to the previous screen (it reloads when shown). If this screen was
+      // opened directly, there's nothing to go back to, so open the list instead.
       if (router.canGoBack()) router.back();
       else router.replace("/recipients");
     } catch (e: any) {
@@ -41,66 +43,66 @@ export default function AddRecipientScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>Full name</Text>
-      <TextInput style={styles.input} placeholder="e.g. Grace Nakato" value={name} onChangeText={setName} />
+    <Screen>
+      <Title>Add a recipient</Title>
+      <Subtitle>Who will receive the money in Uganda?</Subtitle>
 
-      <Text style={styles.label}>Uganda mobile number</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. 0772 123 456"
-        value={phone}
-        onChangeText={onPhoneChange}
-        keyboardType="phone-pad"
-      />
+      <Card>
+        <TextField label="Full name" placeholder="e.g. Grace Nakato" value={name} onChangeText={setName} autoComplete="name" />
+        <TextField
+          label="Uganda mobile number"
+          placeholder="e.g. 0772 123 456"
+          value={phone}
+          onChangeText={onPhoneChange}
+          keyboardType="phone-pad"
+          hint="We'll pick the network from the number. You can change it below."
+        />
 
-      <Text style={styles.label}>Mobile money network</Text>
-      <View style={styles.networkRow}>
-        {NETWORKS.map((n) => (
-          <Pressable
-            key={n}
-            onPress={() => {
-              setNetwork(n);
-              setNetworkTouched(true);
-            }}
-            style={[styles.networkOption, network === n && styles.networkSelected]}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: network === n }}
-          >
-            <Text style={[styles.networkText, network === n && styles.networkTextSelected]}>{n}</Text>
-          </Pressable>
-        ))}
-      </View>
+        <Text style={styles.label}>Mobile money network</Text>
+        <View style={styles.networkRow}>
+          {NETWORKS.map((n) => {
+            const selected = network === n;
+            return (
+              <Pressable
+                key={n}
+                onPress={() => {
+                  setNetwork(n);
+                  setNetworkTouched(true);
+                }}
+                style={[styles.networkOption, selected && styles.networkSelected]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+              >
+                <View style={[styles.dot, { backgroundColor: n === "MTN" ? colors.accent : "#e40000" }]} />
+                <Text style={[styles.networkText, selected && styles.networkTextSelected]}>{n}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
-      <View style={styles.saveButton}>
-        <Button title={saving ? "Saving..." : "Save recipient"} onPress={save} disabled={saving} />
-      </View>
-    </View>
+        <AppButton title="Save recipient" onPress={save} loading={saving} />
+      </Card>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
-  label: { fontWeight: "600", marginBottom: 6, marginTop: 10 },
-  input: {
-    height: 44,
-    borderColor: "#ccc",
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-  },
-  networkRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
+  label: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textSecondary, marginBottom: 6 },
+  networkRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.xl },
   networkOption: {
     flex: 1,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 6,
+    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.button,
+    backgroundColor: colors.surface,
   },
-  networkSelected: { borderColor: "#1E40AF", backgroundColor: "#EFF6FF" },
-  networkText: { fontWeight: "600", color: "#444" },
-  networkTextSelected: { color: "#1E40AF" },
-  saveButton: { marginTop: 20 },
+  networkSelected: { borderColor: colors.secondary, backgroundColor: colors.secondarySoft },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  networkText: { fontFamily: fonts.semibold, fontSize: fontSize.base, color: colors.textSecondary },
+  networkTextSelected: { color: colors.secondary },
 });

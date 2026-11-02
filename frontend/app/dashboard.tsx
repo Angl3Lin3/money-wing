@@ -1,11 +1,15 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Button, StyleSheet, Text, View } from "react-native";
-import { userAPI } from "../services/api";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AppButton, Caption, Card, Loading, Screen, Spacer } from "../components/ui";
+import { formatUgx } from "../constants/format";
+import { colors, fonts, fontSize, radius, shadow, spacing } from "../constants/theme";
+import { quoteAPI, userAPI } from "../services/api";
 import { clearToken } from "../services/auth-storage";
 
 export default function DashboardScreen() {
     const [email, setEmail] = useState<string | null>(null);
+    const [rate, setRate] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
 
     const logout = async () => {
@@ -23,50 +27,100 @@ export default function DashboardScreen() {
                 }
             })
             .finally(() => setLoading(false));
+
+        // Show today's rate (a quote for any valid amount includes it).
+        quoteAPI.get("100").then((q) => setRate(q.exchangeRate)).catch(() => {});
     }, []);
 
-    if (loading) {
-        return (
-            <View style={styles.container}>
-                <ActivityIndicator />
-            </View>
-        );
-    }
+    if (loading) return <Loading />;
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Welcome to MoneyWing!</Text>
-            {email && <Text style={styles.subtitle}>Signed in as {email}</Text>}
+        <Screen>
+            <View style={styles.hero}>
+                <Text style={styles.heroHello}>Hello 👋</Text>
+                {email && <Text style={styles.heroEmail}>{email}</Text>}
+                {rate && (
+                    <View style={styles.ratePill}>
+                        <Text style={styles.rateText}>Today: 1 CAD = {formatUgx(rate)}</Text>
+                    </View>
+                )}
+            </View>
 
-            <Button
-             title="Send Money"
-             onPress={() => router.push('/send')}
-            />
-            <View style={{ height: 12 }} />
-            <Button title="Recipients" onPress={() => router.push('/recipients')} />
-            <View style={{ height: 12 }} />
-            <Button title="Log Out" onPress={logout} color="#666" />
-        </View>
-    )
+            <Pressable
+                onPress={() => router.push("/send")}
+                style={({ pressed }) => [styles.sendCard, pressed && { backgroundColor: colors.primaryPressed }]}
+                accessibilityRole="button"
+            >
+                <Text style={styles.sendIcon}>➜</Text>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.sendTitle}>Send money</Text>
+                    <Text style={styles.sendText}>To MTN or Airtel Mobile Money in Uganda</Text>
+                </View>
+            </Pressable>
+
+            <Card style={styles.menuCard}>
+                <MenuItem icon="👥" title="Recipients" subtitle="People you send money to" onPress={() => router.push("/recipients")} />
+            </Card>
+
+            <Spacer size={spacing.sm} />
+            <AppButton title="Log out" variant="ghost" onPress={logout} />
+            <Caption center style={{ marginTop: spacing.sm }}>Transfer history is coming soon.</Caption>
+        </Screen>
+    );
 }
 
+function MenuItem({ icon, title, subtitle, onPress }: { icon: string; title: string; subtitle: string; onPress: () => void }) {
+    return (
+        <Pressable onPress={onPress} style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.6 }]} accessibilityRole="button">
+            <View style={styles.menuIcon}><Text style={{ fontSize: 20 }}>{icon}</Text></View>
+            <View style={{ flex: 1 }}>
+                <Text style={styles.menuTitle}>{title}</Text>
+                <Text style={styles.menuSubtitle}>{subtitle}</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+        </Pressable>
+    );
+}
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+    hero: {
+        backgroundColor: colors.secondary,
+        borderRadius: radius.card,
+        padding: spacing.xl,
+        marginBottom: spacing.lg,
     },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        marginBottom: 10,
-        color: '#1E40AF',
+    heroHello: { fontFamily: fonts.bold, fontSize: fontSize["2xl"], color: "#fff" },
+    heroEmail: { fontFamily: fonts.regular, fontSize: fontSize.base, color: "#cfe0f3", marginTop: 2 },
+    ratePill: {
+        alignSelf: "flex-start",
+        backgroundColor: colors.accent,
+        borderRadius: radius.pill,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 6,
+        marginTop: spacing.lg,
     },
-    subtitle: {
-        fontSize: 16,
-        color: '#666',
-        marginBottom: 30,
+    rateText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.text },
+    sendCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.lg,
+        backgroundColor: colors.primary,
+        borderRadius: radius.card,
+        padding: spacing.xl,
+        marginBottom: spacing.lg,
+        ...shadow,
     },
+    sendIcon: { fontSize: 28, color: "#fff" },
+    sendTitle: { fontFamily: fonts.bold, fontSize: fontSize.xl, color: "#fff" },
+    sendText: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: "#ffe2d4", marginTop: 2 },
+    menuCard: { paddingVertical: spacing.sm },
+    menuItem: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md },
+    menuIcon: {
+        width: 44, height: 44, borderRadius: 22,
+        backgroundColor: colors.secondarySoft,
+        alignItems: "center", justifyContent: "center",
+    },
+    menuTitle: { fontFamily: fonts.semibold, fontSize: fontSize.base, color: colors.text },
+    menuSubtitle: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, marginTop: 2 },
+    chevron: { fontFamily: fonts.regular, fontSize: 28, color: colors.textMuted },
 });

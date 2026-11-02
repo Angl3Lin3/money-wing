@@ -1,9 +1,11 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Button, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { AppButton, Badge, Caption, Card, DetailRow, Divider, Loading, Notice, Screen, Spacer } from "../../components/ui";
 import { formatCad, formatUgx } from "../../constants/format";
 import { formatPhone } from "../../constants/networks";
 import { shortReference, STATUS_INFO } from "../../constants/status";
+import { colors, fonts, fontSize, spacing } from "../../constants/theme";
 import { getErrorMessage, Transaction, transactionAPI } from "../../services/api";
 
 export default function TransferScreen() {
@@ -21,93 +23,54 @@ export default function TransferScreen() {
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
+      <Screen center>
+        <Notice tone="danger">{error}</Notice>
+      </Screen>
     );
   }
 
-  if (!transfer) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
+  if (!transfer) return <Loading />;
 
   const status = STATUS_INFO[transfer.status];
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {created === "1" && (
-        <View style={styles.success}>
-          <Text style={styles.successTitle}>Transfer created</Text>
-          <Text style={styles.successText}>Next, you&apos;ll pay by card to send it.</Text>
-        </View>
-      )}
+    <Screen>
+      {created === "1" && <Notice tone="success">Transfer created. Next, pay by card to send it.</Notice>}
 
-      <Text style={styles.amount}>{formatUgx(transfer.ugxAmount)}</Text>
-      <Text style={styles.subtitle}>to {transfer.recipient.name}</Text>
-      <Text style={[styles.badge, { color: status.color, backgroundColor: status.background }]}>{status.label}</Text>
+      <Card style={styles.summary}>
+        <Text style={styles.summaryLabel}>{transfer.recipient.name} receives</Text>
+        <Text style={styles.summaryAmount}>{formatUgx(transfer.ugxAmount)}</Text>
+        <Spacer size={spacing.md} />
+        <Badge label={status.label} color={status.color} background={status.background} style={{ alignSelf: "center" }} />
+      </Card>
 
-      <View style={styles.card}>
-        <Row label="Reference" value={shortReference(transfer.id)} />
-        <Row label="Created" value={new Date(transfer.createdAt).toLocaleString()} />
-        <Row label="Recipient" value={transfer.recipient.name} />
-        <Row label="Mobile number" value={formatPhone(transfer.recipient.phoneNumber)} />
-        <Row label="Network" value={`${transfer.recipient.network} Mobile Money`} />
-        <View style={styles.divider} />
-        <Row label="You pay" value={formatCad(transfer.cadAmount)} />
-        <Row label="Fee (included)" value={formatCad(transfer.fee)} />
-        <Row label="Exchange rate" value={`1 CAD = ${formatUgx(transfer.exchangeRate)}`} />
-        <Row label="They receive" value={formatUgx(transfer.ugxAmount)} />
-      </View>
+      <Card>
+        <DetailRow label="Reference" value={shortReference(transfer.id)} />
+        <DetailRow label="Created" value={new Date(transfer.createdAt).toLocaleString()} />
+        <Divider />
+        <DetailRow label="Recipient" value={transfer.recipient.name} />
+        <DetailRow label="Mobile number" value={formatPhone(transfer.recipient.phoneNumber)} />
+        <DetailRow label="Network" value={`${transfer.recipient.network} Mobile Money`} />
+        <Divider />
+        <DetailRow label="You pay" value={formatCad(transfer.cadAmount)} />
+        <DetailRow label="Fee (included)" value={formatCad(transfer.fee)} />
+        <DetailRow label="Exchange rate" value={`1 CAD = ${formatUgx(transfer.exchangeRate)}`} />
+      </Card>
 
       {transfer.status === "DRAFT" && (
-        <View style={styles.payBox}>
-          <Button title="Pay with card" disabled onPress={() => {}} />
-          <Text style={styles.note}>Card payment is the next step to build.</Text>
+        <View style={{ marginBottom: spacing.md }}>
+          <AppButton title="Pay with card" disabled onPress={() => {}} />
+          <Caption center style={{ marginTop: spacing.sm }}>Card payment is the next step to build.</Caption>
         </View>
       )}
 
-      <Button title="Back to dashboard" onPress={() => router.replace("/dashboard")} color="#666" />
-    </ScrollView>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
-    </View>
+      <AppButton title="Back to home" variant="secondary" onPress={() => router.replace("/dashboard")} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: "#fff", flexGrow: 1 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
-  success: { backgroundColor: "#DCFCE7", padding: 14, borderRadius: 10, marginBottom: 16 },
-  successTitle: { fontWeight: "bold", fontSize: 16, color: "#166534" },
-  successText: { color: "#166534", marginTop: 2 },
-  amount: { fontSize: 28, fontWeight: "bold", textAlign: "center" },
-  subtitle: { fontSize: 16, color: "#4B5563", textAlign: "center", marginTop: 2 },
-  badge: {
-    alignSelf: "center",
-    marginTop: 10,
-    marginBottom: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: "hidden",
-    fontWeight: "bold",
-  },
-  card: { borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 14, marginBottom: 16 },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, gap: 12 },
-  label: { color: "#4B5563" },
-  value: { color: "#111827", flexShrink: 1, textAlign: "right" },
-  divider: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 6 },
-  payBox: { marginBottom: 12 },
-  note: { color: "#666", textAlign: "center", marginTop: 6 },
-  errorText: { color: "#B91C1C", textAlign: "center" },
+  summary: { alignItems: "center" },
+  summaryLabel: { fontFamily: fonts.medium, fontSize: fontSize.base, color: colors.textMuted },
+  summaryAmount: { fontFamily: fonts.bold, fontSize: fontSize["4xl"], color: colors.text, marginTop: spacing.xs },
 });

@@ -1,7 +1,10 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Button, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import RecipientAvatar, { networkBadgeColors } from "../components/RecipientAvatar";
+import { AppButton, Badge, Body, Card, Loading, Notice, Screen, Spacer, Subtitle, Title } from "../components/ui";
 import { formatPhone } from "../constants/networks";
+import { colors, fonts, fontSize, spacing } from "../constants/theme";
 import { confirmAction, showAlert } from "../services/alert";
 import { getErrorMessage, Recipient, recipientAPI } from "../services/api";
 
@@ -39,104 +42,77 @@ export default function RecipientsScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
+  if (loading) return <Loading />;
 
   return (
-    <View style={styles.container}>
-      {error && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Button title="Try again" onPress={load} />
-        </View>
+    <Screen>
+      <Title>Recipients</Title>
+      <Subtitle>People in Uganda you send money to.</Subtitle>
+
+      {error && <Notice tone="danger">{error}</Notice>}
+
+      {recipients.length === 0 && !error ? (
+        <Card style={styles.empty}>
+          <Text style={styles.emptyIcon}>👥</Text>
+          <Text style={styles.emptyTitle}>No recipients yet</Text>
+          <Body center>Add someone to start sending money.</Body>
+        </Card>
+      ) : (
+        <Card style={styles.list}>
+          {recipients.map((item, index) => {
+            const badge = networkBadgeColors(item.network);
+            return (
+              <View key={item.id} style={[styles.row, index > 0 && styles.rowBorder]}>
+                <RecipientAvatar name={item.name} />
+                <View style={styles.info}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <Text style={styles.phone}>{formatPhone(item.phoneNumber)}</Text>
+                  <Spacer size={6} />
+                  <Badge label={item.network} color={badge.color} background={badge.background} />
+                </View>
+                <View style={styles.actions}>
+                  <Pressable
+                    onPress={() => router.push({ pathname: "/send", params: { recipientId: item.id } })}
+                    style={[styles.actionButton, styles.sendButton]}
+                    accessibilityLabel={`Send money to ${item.name}`}
+                  >
+                    <Text style={[styles.actionText, styles.sendText]}>Send</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => remove(item)}
+                    style={[styles.actionButton, styles.deleteButton]}
+                    accessibilityLabel={`Delete ${item.name}`}
+                  >
+                    <Text style={[styles.actionText, styles.deleteText]}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+        </Card>
       )}
 
-      <FlatList
-        data={recipients}
-        keyExtractor={(r) => r.id}
-        contentContainerStyle={recipients.length === 0 && styles.center}
-        ListEmptyComponent={
-          !error ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No recipients yet</Text>
-              <Text style={styles.emptyText}>Add the people in Uganda you want to send money to.</Text>
-            </View>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
-            </View>
-            <View style={styles.info}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.phone}>{formatPhone(item.phoneNumber)}</Text>
-            </View>
-            <Text style={[styles.badge, item.network === "MTN" ? styles.mtn : styles.airtel]}>
-              {item.network}
-            </Text>
-            <Pressable onPress={() => remove(item)} style={styles.deleteButton} accessibilityLabel={`Delete ${item.name}`}>
-              <Text style={styles.deleteText}>Delete</Text>
-            </Pressable>
-          </View>
-        )}
-      />
-
-      <View style={styles.footer}>
-        <Button title="+ Add recipient" onPress={() => router.push("/add-recipient")} />
-      </View>
-    </View>
+      <AppButton title="+ Add recipient" onPress={() => router.push("/add-recipient")} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  center: { flexGrow: 1, justifyContent: "center", alignItems: "center" },
-  empty: { alignItems: "center", padding: 30 },
-  emptyTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 6 },
-  emptyText: { color: "#666", textAlign: "center" },
-  errorBox: { margin: 16, padding: 12, backgroundColor: "#FEF2F2", borderRadius: 8, gap: 8 },
-  errorText: { color: "#B91C1C" },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#DBEAFE",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  avatarText: { fontWeight: "bold", color: "#1E40AF" },
+  empty: { alignItems: "center", gap: spacing.sm },
+  emptyIcon: { fontSize: 36 },
+  emptyTitle: { fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.text },
+  list: { paddingVertical: spacing.sm },
+  row: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md },
+  rowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
   info: { flex: 1 },
-  name: { fontSize: 16, fontWeight: "600" },
-  phone: { color: "#666", marginTop: 2 },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    fontSize: 12,
-    fontWeight: "bold",
-    overflow: "hidden",
-    marginRight: 8,
-  },
-  mtn: { backgroundColor: "#FEF3C7", color: "#92400E" },
-  airtel: { backgroundColor: "#FEE2E2", color: "#B91C1C" },
-  deleteButton: { padding: 6 },
-  deleteText: { color: "#B91C1C" },
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: "#E5E7EB" },
+  name: { fontFamily: fonts.semibold, fontSize: fontSize.base, color: colors.text },
+  phone: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, marginTop: 2 },
+  // Both buttons are the same size so their text lines up.
+  actions: { gap: spacing.sm },
+  actionButton: { width: 72, paddingVertical: 6, borderRadius: 999, alignItems: "center" },
+  actionText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, textAlign: "center" },
+  sendButton: { backgroundColor: colors.primarySoft },
+  sendText: { color: colors.primary },
+  deleteButton: { backgroundColor: colors.dangerSoft },
+  deleteText: { color: colors.danger },
 });

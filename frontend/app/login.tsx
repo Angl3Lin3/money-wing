@@ -1,10 +1,10 @@
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
 import { useState } from "react";
-import { Button, StyleSheet, Text, TextInput, View } from "react-native";
+import PasswordInput from "../components/PasswordInput";
+import { AppButton, Card, Screen, Spacer, Subtitle, TextField, TextLink, Title } from "../components/ui";
+import { showAlert } from "../services/alert";
 import { authAPI, getErrorMessage } from "../services/api";
 import { saveToken } from "../services/auth-storage";
-import { showAlert } from "../services/alert";
-import PasswordInput from "../components/PasswordInput";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -13,7 +13,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      showAlert("Error", "Please enter your email and password");
+      showAlert("Missing details", "Please enter your email and password.");
       return;
     }
 
@@ -34,7 +34,7 @@ export default function LoginScreen() {
           showAlert("Error", getErrorMessage(resendError, "Could not send a new code"));
         }
       } else {
-        showAlert("Error", message);
+        showAlert("Could not log in", message);
       }
     } finally {
       setLoading(false);
@@ -42,51 +42,32 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome back</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <PasswordInput
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        onSubmitEditing={handleLogin}
-      />
-      <Button title={loading ? "Logging in..." : "Log In"} onPress={handleLogin} disabled={loading} />
-      <Link href="/signup" style={styles.link}>No account yet? Sign up</Link>
-    </View>
+    <Screen center>
+      <Title>Welcome back</Title>
+      <Subtitle>Log in to send money.</Subtitle>
+
+      <Card>
+        <TextField
+          label="Email"
+          placeholder="you@example.com"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoComplete="email"
+        />
+        <PasswordInput
+          label="Password"
+          placeholder="Your password"
+          value={password}
+          onChangeText={setPassword}
+          onSubmitEditing={handleLogin}
+        />
+        <AppButton title="Log in" onPress={handleLogin} loading={loading} />
+      </Card>
+
+      <Spacer size={8} />
+      <TextLink center onPress={() => router.replace("/signup")}>No account yet? Sign up</TextLink>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  input: {
-    width: "80%",
-    height: 40,
-    borderColor: "#ccc",
-    borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 15,
-  },
-  link: {
-    marginTop: 20,
-    color: "blue",
-  },
-});

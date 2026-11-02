@@ -1,19 +1,43 @@
+import {
+  Inter_300Light,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  useFonts,
+} from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { BackButton, HomeButton } from '../components/HeaderNav';
+import { colors, fonts } from '../constants/theme';
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Inter_300Light,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator color={colors.secondary} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Stack
        screenOptions={({ navigation }) => ({
-        headerStyle: {
-          backgroundColor: '#1E40AF',
-        },
+        headerStyle: { backgroundColor: colors.secondary },
         headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        headerTitleStyle: { fontFamily: fonts.semibold, fontSize: 17 },
+        headerTitleAlign: 'center',
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: colors.background },
         // Home on the right of every screen; Back on the left when there's somewhere to go back to.
         headerLeft: () => <BackButton canGoBack={navigation.canGoBack()} />,
         headerRight: () => <HomeButton />,
@@ -21,11 +45,11 @@ export default function RootLayout() {
       >
        {/* Start screens: Home only (nothing to go back to) */}
        <Stack.Screen name="index" options={{ title: 'MoneyWing', headerLeft: () => null }}/>
-       <Stack.Screen name="dashboard" options={{ title: 'Dashboard', headerLeft: () => null }}/>
+       <Stack.Screen name="dashboard" options={{ title: 'MoneyWing', headerLeft: () => null }}/>
 
        <Stack.Screen name="signup" options={{ title: 'Create Account' }}/>
        <Stack.Screen name="login" options={{ title: 'Log In' }}/>
-       <Stack.Screen name="otp" options={{ title: 'Verify OTP'}}/>
+       <Stack.Screen name="otp" options={{ title: 'Verify Email'}}/>
        <Stack.Screen name="recipients" options={{ title: 'Recipients' }}/>
        <Stack.Screen name="add-recipient" options={{ title: 'Add Recipient' }}/>
        <Stack.Screen name="send" options={{ title: 'Send Money' }}/>
@@ -38,8 +62,6 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  center: { justifyContent: 'center', alignItems: 'center' },
 });

@@ -1,9 +1,9 @@
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
 import { useState } from "react";
-import { Button, StyleSheet, Text, TextInput, View } from "react-native";
-import { authAPI, getErrorMessage } from "../services/api";
-import { showAlert } from "../services/alert";
 import PasswordInput from "../components/PasswordInput";
+import { AppButton, Card, Screen, Spacer, Subtitle, TextField, TextLink, Title } from "../components/ui";
+import { showAlert } from "../services/alert";
+import { authAPI, getErrorMessage } from "../services/api";
 
 export default function SignUpScreen() {
   const [email, setEmail] = useState("");
@@ -12,70 +12,48 @@ export default function SignUpScreen() {
 
   const handleSignUp = async () => {
     if (!email || !password) {
-      showAlert('Error', 'Please fill in all fields');
+      showAlert("Missing details", "Please enter your email and a password.");
       return;
     }
 
     setLoading(true);
     try {
       await authAPI.signup(email.trim(), password);
-      router.push({ pathname: '/otp', params: { email: email.trim() } });
+      router.push({ pathname: "/otp", params: { email: email.trim() } });
     } catch (error: any) {
-      showAlert('Error', getErrorMessage(error, 'Signup failed'));
+      showAlert("Could not create account", getErrorMessage(error, "Signup failed"));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
+    <Screen center>
+      <Title>Create your account</Title>
+      <Subtitle>It takes less than a minute.</Subtitle>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
+      <Card>
+        <TextField
+          label="Email"
+          placeholder="you@example.com"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoComplete="email"
+        />
+        <PasswordInput
+          label="Password"
+          placeholder="Choose a password"
+          value={password}
+          onChangeText={setPassword}
+          onSubmitEditing={handleSignUp}
+        />
+        <AppButton title="Create account" onPress={handleSignUp} loading={loading} />
+      </Card>
 
-      <PasswordInput
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-      />
-
-      <Button title={loading ? "Creating account..." : "Sign Up"} onPress={handleSignUp} disabled={loading} />
-      <Link href="/login" style={styles.backLink}>Already have an account? Log in</Link>
-  
-    </View>
+      <Spacer size={8} />
+      <TextLink center onPress={() => router.replace("/login")}>Already have an account? Log in</TextLink>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  input: {
-    width: "80%",
-    height: 40,
-    borderColor: "#ccc",
-    borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
-    marginBottom: 15,
-  },
-  backLink: {
-    marginTop: 20,
-    color: "blue",
-  },
-});
