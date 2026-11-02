@@ -29,6 +29,8 @@ export default function RootLayout() {
        <Stack.Screen name="recipients" options={{ title: 'Recipients' }}/>
        <Stack.Screen name="add-recipient" options={{ title: 'Add Recipient' }}/>
        <Stack.Screen name="send" options={{ title: 'Send Money' }}/>
+       <Stack.Screen name="review" options={{ title: 'Review Transfer' }}/>
+       <Stack.Screen name="transfer/[id]" options={{ title: 'Transfer' }}/>
        <Stack.Screen name="api-test" options={{ title: 'API Test' }}/>
       </Stack>
     </View>

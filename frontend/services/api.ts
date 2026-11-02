@@ -147,3 +147,46 @@ export const quoteAPI = {
     return response.data;
   },
 };
+
+// Transfers
+export type TransactionStatus =
+  | 'DRAFT'
+  | 'PAYMENT_PENDING'
+  | 'FUNDED'
+  | 'PAYOUT_PENDING'
+  | 'COMPLETED'
+  | 'PAYOUT_FAILED'
+  | 'FAILED';
+
+export interface Transaction {
+  id: string;
+  cadAmount: number;
+  fee: number;
+  exchangeRate: number;
+  ugxAmount: number;
+  status: TransactionStatus;
+  recipient: { name: string; phoneNumber: string; network: Network };
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export const transactionAPI = {
+  // `expected` = the amounts the user saw; the server refuses (409) if they changed.
+  create: async (
+    recipientId: string,
+    quote: Quote
+  ): Promise<Transaction> => {
+    const response = await api.post('/transaction', {
+      recipientId,
+      cadAmount: quote.cadAmount.toFixed(2),
+      expectedUgxAmount: quote.ugxAmount,
+      expectedFee: quote.fee,
+    });
+    return response.data.transaction;
+  },
+
+  get: async (id: string): Promise<Transaction> => {
+    const response = await api.get(`/transaction/${id}`);
+    return response.data.transaction;
+  },
+};

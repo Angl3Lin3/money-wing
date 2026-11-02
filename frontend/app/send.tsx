@@ -71,11 +71,10 @@ export default function SendScreen() {
 
   const onContinue = () => {
     if (!selected || !quote) return;
-    // Next step (3c) will open a review & confirm screen here.
-    showAlert(
-      "Review coming next",
-      `${formatCad(quote.cadAmount)} → ${formatUgx(quote.ugxAmount)} for ${selected.name}.\n\nThe review & confirm screen is the next step to build.`
-    );
+    router.push({
+      pathname: "/review",
+      params: { recipientId: selected.id, cadAmount: quote.cadAmount.toFixed(2) },
+    });
   };
 
   if (loadingRecipients) {

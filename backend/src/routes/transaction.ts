@@ -1,11 +1,30 @@
 import { StripeService } from './../services/stripe.service';
 import express, { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { normalizeUgandaPhone, networkForPhone, VALID_NETWORKS } from '../utils/phone';
 import { calculateQuote, QuoteError } from '../services/pricing.service';
 
 
+
+// The shape of a transfer the app receives.
+type TransactionWithRecipient = Prisma.TransactionGetPayload<{
+    include: { recipient: { select: { name: true; phoneNumber: true; network: true } } }
+}>;
+
+function serializeTransaction(transaction: TransactionWithRecipient) {
+    return {
+        id: transaction.id,
+        cadAmount: transaction.cadAmount,
+        fee: transaction.fee,
+        exchangeRate: transaction.exchangeRate,
+        ugxAmount: transaction.ugxAmount,
+        status: transaction.status,
+        recipient: transaction.recipient,
+        createdAt: transaction.createdAt,
+        updatedAt: transaction.updatedAt
+    };
+}
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -189,6 +208,40 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
             return res.status(404).json({error: 'Recipient not found'});
         }
 
+        // Price lock: the app sends the numbers the user saw on the review
+        // screen. If the rate or fee changed since then, don't silently use
+        // different numbers; send back the new quote so they can review it.
+        const { expectedUgxAmount, expectedFee } = req.body;
+        const priceChanged =
+            (expectedUgxAmount !== undefined && Number(expectedUgxAmount) !== quote.ugxAmount) ||
+            (expectedFee !== undefined && Number(expectedFee) !== quote.fee);
+        if (priceChanged) {
+            return res.status(409).json({
+                error: 'The exchange rate or fee has changed. Please review the new amounts.',
+                quote
+            });
+        }
+
+        // Duplicate guard: if the same transfer was just created (e.g. the
+        // Confirm button was tapped twice), return that one instead of a copy.
+        const recentDuplicate = await prisma.transaction.findFirst({
+            where: {
+                userId,
+                recipientId,
+                cadAmount: quote.cadAmount,
+                status: 'DRAFT',
+                createdAt: { gte: new Date(Date.now() - 30 * 1000) }
+            },
+            include: { recipient: { select: { name: true, phoneNumber: true, network: true } } },
+            orderBy: { createdAt: 'desc' }
+        });
+        if (recentDuplicate) {
+            return res.status(200).json({
+                message: 'Transaction already created',
+                transaction: serializeTransaction(recentDuplicate)
+            });
+        }
+
         // Create transaction record
         const transaction = await prisma.transaction.create({
             data: {
@@ -213,16 +266,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 
         res.status(201).json({
             message: 'Transaction created successfully',
-            transaction: {
-                id: transaction.id,
-                cadAmount: transaction.cadAmount,
-                fee: transaction.fee,
-                exchangeRate: transaction.exchangeRate,
-                ugxAmount: transaction.ugxAmount,
-                status: transaction.status,
-                recipient: transaction.recipient,
-                createdAt: transaction.createdAt
-            }
+            transaction: serializeTransaction(transaction)
         });
     } catch(error: any) {
         console.error('Create transaction error:', error);
@@ -283,5 +327,31 @@ router.post('/:id/payment-intent', authenticateToken, async( req: AuthRequest, r
 });
 
 
+// Endpoint -> Get one of the user's transfers
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId;
+        const id = req.params.id;
+        if(!userId) {
+            return res.status(401).json({ error: 'User not authenticated'});
+        }
+        if(!id) {
+            return res.status(400).json({ error: 'Transaction ID is required'});
+        }
+
+        const transaction = await prisma.transaction.findFirst({
+            where: { id, userId },
+            include: { recipient: { select: { name: true, phoneNumber: true, network: true } } }
+        });
+        if(!transaction) {
+            return res.status(404).json({ error: 'Transaction not found'});
+        }
+
+        res.status(200).json({ transaction: serializeTransaction(transaction) });
+    } catch(error: any) {
+        console.error('Get transaction error:', error);
+        res.status(500).json({ error: 'Failed to fetch transaction'});
+    }
+});
 
 export default router;
