@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppButton, Card, Loading, Screen, Spacer } from "../components/ui";
+import { IS_DEMO } from "../constants/demo";
 import { formatUgx } from "../constants/format";
 import { colors, fonts, fontSize, radius, shadow, spacing } from "../constants/theme";
 import { quoteAPI, userAPI } from "../services/api";
@@ -41,7 +42,7 @@ export default function DashboardScreen() {
                 {email && <Text style={styles.heroEmail}>{email}</Text>}
                 {rate && (
                     <View style={styles.ratePill}>
-                        <Text style={styles.rateText}>Today: 1 CAD = {formatUgx(rate)}</Text>
+                        <Text style={styles.rateText}>{IS_DEMO ? "Sample rate" : "Today"}: 1 CAD = {formatUgx(rate)}</Text>
                     </View>
                 )}
             </View>

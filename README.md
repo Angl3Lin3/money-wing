@@ -242,6 +242,12 @@ The settings file is `backend/.env`. **It holds secrets and is never committed t
 
 The server restarts by itself when you save `.env` or any backend file.
 
+### Demo mode (app)
+
+While MoneyWing isn't live, every screen shows a gold **"Demo version: no real money is sent"** strip, and the dashboard calls the rate a **sample rate**. This is on by default. To turn it off at launch, put `EXPO_PUBLIC_DEMO_MODE=false` in `frontend/.env` (see `frontend/constants/demo.ts`).
+
+The **API connection test** screen is a developer tool. Its link on the welcome screen only appears while developing, never in a released app.
+
 ---
 
 ## Project structure

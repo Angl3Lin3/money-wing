@@ -13,6 +13,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
+import { DEMO_MESSAGE, IS_DEMO } from "../constants/demo";
 import { colors, fonts, fontSize, radius, shadow, spacing } from "../constants/theme";
 
 // ---------- Layout ----------
@@ -21,13 +22,25 @@ import { colors, fonts, fontSize, radius, shadow, spacing } from "../constants/t
 // so it also looks right in a wide browser window.
 export function Screen({ children, center }: { children: ReactNode; center?: boolean }) {
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[styles.screenContent, center && styles.screenCenter]}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.screenInner}>{children}</View>
-    </ScrollView>
+    <View style={styles.screen}>
+      {IS_DEMO && <DemoBanner />}
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[styles.screenContent, center && styles.screenCenter]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.screenInner}>{children}</View>
+      </ScrollView>
+    </View>
+  );
+}
+
+// Thin gold strip under the header while the app isn't live.
+export function DemoBanner() {
+  return (
+    <View style={styles.demoBanner} accessibilityRole="alert">
+      <Text style={styles.demoText}>{DEMO_MESSAGE}</Text>
+    </View>
   );
 }
 
@@ -198,6 +211,8 @@ export function Notice({ children, tone = "info" }: { children: ReactNode; tone?
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
+  demoBanner: { backgroundColor: colors.accent, paddingVertical: 6, paddingHorizontal: spacing.lg },
+  demoText: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.text, textAlign: "center" },
   screenContent: { flexGrow: 1, padding: spacing.xl, alignItems: "center" },
   screenCenter: { justifyContent: "center" },
   screenInner: { width: "100%", maxWidth: 480 },

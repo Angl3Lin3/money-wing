@@ -6,10 +6,11 @@ import { AppButton, Card, Loading, Screen, Spacer, Subtitle, TextLink } from "..
 import { colors, fonts, fontSize, radius, spacing } from "../constants/theme";
 import { getToken } from "../services/auth-storage";
 
+// Only describe what the app does today. Card payment isn't built yet.
 const FEATURES = [
-  { icon: "⚡", text: "Delivered straight to MTN or Airtel Mobile Money" },
-  { icon: "👁", text: "See the fee and exact amount before you pay" },
-  { icon: "🔒", text: "Secure card payments" },
+  { icon: "📱", text: "Send to MTN or Airtel Mobile Money in Uganda" },
+  { icon: "👁", text: "See the fee and exact amount before you confirm" },
+  { icon: "💳", text: "Card payments coming soon" },
 ];
 
 export default function WelcomeScreen() {
@@ -48,8 +49,13 @@ export default function WelcomeScreen() {
       <AppButton title="Create account" onPress={() => router.push("/signup")} />
       <Spacer size={spacing.md} />
       <AppButton title="Log in" variant="secondary" onPress={() => router.push("/login")} />
-      <Spacer size={spacing.xl} />
-      <TextLink center onPress={() => router.push("/api-test")}>Developer: test API connection</TextLink>
+      {/* Developer tools: only shown while developing, never in the real app */}
+      {__DEV__ && (
+        <>
+          <Spacer size={spacing.xl} />
+          <TextLink center onPress={() => router.push("/api-test")}>Developer: test API connection</TextLink>
+        </>
+      )}
     </Screen>
   );
 }
