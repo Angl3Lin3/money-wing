@@ -7,7 +7,8 @@ import userRoutes from './routes/user';
 import kycRoutes from './routes/kyc';
 import transactionRoutes from './routes/transaction';
 import webhookRoutes from './routes/webhooks';
-// import adminRoutes from './routes/admin';
+import adminRoutes from './routes/admin';
+import { requestMonitor } from './services/monitor.service';
 
 const app = express();
 
@@ -17,6 +18,7 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(morgan('combined'));
+app.use(requestMonitor); // recent requests, shown in the developer area
 
 // Webhook route with raw body parsing - MUST come BEFORE express.json()
 app.use('/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
@@ -34,7 +36,7 @@ app.use('/auth', authRoutes); // Add this line
 app.use('/user', userRoutes);
 app.use('/kyc', kycRoutes);
 app.use('/transaction', transactionRoutes);
-// app.use('/admin', adminRoutes);
+app.use('/admin', adminRoutes); // developer area (ADMIN_EMAILS only)
 
 export default app;
 

@@ -20,6 +20,8 @@ export const colors = {
   textMuted: '#777777',
   onPrimary: '#ffffff',
 
+  dev: '#1F2937',            // dark header for the developer area
+
   success: '#15803d',
   successSoft: '#dcfce7',
   warning: '#92400e',

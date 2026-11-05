@@ -53,7 +53,7 @@ export default function WelcomeScreen() {
       {__DEV__ && (
         <>
           <Spacer size={spacing.xl} />
-          <TextLink center onPress={() => router.push("/api-test")}>Developer: test API connection</TextLink>
+          <TextLink center onPress={() => router.push("/dev-login")}>Developer area</TextLink>
         </>
       )}
     </Screen>

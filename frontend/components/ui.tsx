@@ -20,10 +20,10 @@ import { colors, fonts, fontSize, radius, shadow, spacing } from "../constants/t
 
 // Scrollable page with the light grey background, centered and width-limited
 // so it also looks right in a wide browser window.
-export function Screen({ children, center }: { children: ReactNode; center?: boolean }) {
+export function Screen({ children, center, hideDemoBanner }: { children: ReactNode; center?: boolean; hideDemoBanner?: boolean }) {
   return (
     <View style={styles.screen}>
-      {IS_DEMO && <DemoBanner />}
+      {IS_DEMO && !hideDemoBanner && <DemoBanner />}
       <ScrollView
         style={styles.screen}
         contentContainerStyle={[styles.screenContent, center && styles.screenCenter]}

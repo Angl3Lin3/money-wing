@@ -197,6 +197,33 @@ Screen: **Transfer History** (from the dashboard).
 - **Dashboard:** greeting, today's exchange rate, a large **Send money** button, and links to Recipients and Transfer history.
 - All colours, fonts and sizes live in `frontend/constants/theme.ts`, and shared pieces (buttons, inputs, cards) in `frontend/components/ui.tsx`. New screens should use these so everything stays consistent.
 
+### 8. Developer area
+
+A private area for the team to check how the app is working, separate from the customer app (it has a dark header).
+
+**Getting in**
+1. Sign up in the app as normal and verify the account.
+2. Add that email to `ADMIN_EMAILS` in `backend/.env`, for example `ADMIN_EMAILS="you@example.com,teammate@example.com"`, and save.
+3. Open **Developer area** at the bottom of the welcome screen (only shown while developing), or go to `/dev-login` (e.g. `http://localhost:8081/dev-login`).
+
+**Shortcut for local development:** instead of steps 1–2, set `DEV_ADMIN_EMAIL` and `DEV_ADMIN_PASSWORD` in `backend/.env`. When the server starts it creates that account (already verified) and lets it into the developer area. This only works locally; it's switched off when `NODE_ENV=production`, so a simple password can't protect a real server. Each teammate sets their own in their own `.env`.
+
+Anyone not listed is refused, even with a valid customer account. If `ADMIN_EMAILS` is empty, nobody gets in. The developer login is stored separately from the customer login, so you can be logged into both.
+
+**Tabs** (refresh automatically every 15 seconds):
+
+| Tab | Shows |
+| --- | --- |
+| Overview | Server and database health, user and transfer counts, paid volume, transfers by status, current rate/fee/limits, and which settings are configured. Secret keys show only "set" or "missing", never their values |
+| API checks | Runs the server, login, quotes, recipients and database checks, with response times (replaces the old API test screen) |
+| Transfers | Latest transfers from all customers, filterable by status |
+| Users | Latest sign-ups with verification status and counts. Passwords are never sent |
+| Activity | Requests and server errors in the last hour, average response time, and a live list of recent requests and errors |
+
+The activity log is kept in memory and clears when the server restarts. It never stores request contents, passwords or tokens, and ids in paths are hidden.
+
+**New endpoints** (all require a developer login): `GET /admin/overview`, `GET /admin/users`, `GET /admin/transactions?status=`, `GET /admin/activity`.
+
 ---
 
 ## API reference
@@ -237,6 +264,8 @@ The settings file is `backend/.env`. **It holds secrets and is never committed t
 | `FEE_PERCENT` | | `2` | Fee as a percent of the amount |
 | `MIN_SEND_CAD` | | `5` | Smallest transfer |
 | `MAX_SEND_CAD` | | `3000` | Largest transfer |
+| `ADMIN_EMAILS` | For developer area | | Comma-separated emails allowed into the developer area |
+| `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD` | | | Local only: auto-created developer account |
 | `STRIPE_SECRET_KEY` | For payments | | Stripe test key (`sk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | For payments | | Stripe webhook secret (`whsec_...`) |
 
@@ -246,7 +275,7 @@ The server restarts by itself when you save `.env` or any backend file.
 
 While MoneyWing isn't live, every screen shows a gold **"Demo version: no real money is sent"** strip, and the dashboard calls the rate a **sample rate**. This is on by default. To turn it off at launch, put `EXPO_PUBLIC_DEMO_MODE=false` in `frontend/.env` (see `frontend/constants/demo.ts`).
 
-The **API connection test** screen is a developer tool. Its link on the welcome screen only appears while developing, never in a released app.
+The **Developer area** link on the welcome screen only appears while developing, never in a released app.
 
 ---
 
