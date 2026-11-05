@@ -1,24 +1,11 @@
-import {
-  Inter_300Light,
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  useFonts,
-} from '@expo-google-fonts/inter';
+import { Carlito_400Regular, Carlito_700Bold, useFonts } from '@expo-google-fonts/carlito';
 import { Stack } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { BackButton, HomeButton } from '../components/HeaderNav';
 import { colors, fonts } from '../constants/theme';
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
-    Inter_300Light,
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
+  const [fontsLoaded] = useFonts({ Carlito_400Regular, Carlito_700Bold });
 
   if (!fontsLoaded) {
     return (

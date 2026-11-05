@@ -184,12 +184,12 @@ Screen: **Transfer History** (from the dashboard).
 
 ### 7. New look and navigation
 
-- **MoneyWing design system** from the project documentation:
-  - orange `#fc4c01` buttons
-  - blue `#004c96` header and accents
+- **Official MoneyWing brand**, matching the website:
+  - orange `#FC4C02` buttons
+  - blue `#004C97` header and accents
+  - gold `#FFC72C` accent
   - light grey backgrounds
-  - yellow accent `#ffc62d`
-  - **Inter** font
+  - **Carlito** font. The brand font is Calibri, but Calibri can't be bundled into an app, so we use Carlito, a free font made to match it.
   - rounded white cards and labeled inputs
 - **MoneyWing logo** on the welcome screen. The wing is used as the app icon and browser tab icon.
 - **Home button** (the wing, top right) on every screen.
