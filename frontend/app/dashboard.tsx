@@ -63,6 +63,8 @@ export default function DashboardScreen() {
                 <MenuItem icon="👥" title="Recipients" subtitle="People you send money to" onPress={() => router.push("/recipients")} />
                 <View style={styles.menuDivider} />
                 <MenuItem icon="🧾" title="Transfer history" subtitle="See all your transfers and their status" onPress={() => router.push("/history")} />
+                <View style={styles.menuDivider} />
+                <MenuItem icon="👤" title="Your account" subtitle="Password, details, delete account" onPress={() => router.push("/profile")} />
             </Card>
 
             <Spacer size={spacing.sm} />

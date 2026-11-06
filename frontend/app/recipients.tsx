@@ -79,12 +79,19 @@ export default function RecipientsScreen() {
                     <Text style={[styles.actionText, styles.sendText]}>Send</Text>
                   </Pressable>
                   <Pressable
+                    onPress={() => router.push({ pathname: "/add-recipient", params: { id: item.id } })}
+                    style={[styles.actionButton, styles.editButton]}
+                    accessibilityLabel={`Edit ${item.name}`}
+                  >
+                    <Text style={[styles.actionText, styles.editText]}>Edit</Text>
+                  </Pressable>
+                  {!(item.transferCount ?? 0) && <Pressable
                     onPress={() => remove(item)}
                     style={[styles.actionButton, styles.deleteButton]}
                     accessibilityLabel={`Delete ${item.name}`}
                   >
                     <Text style={[styles.actionText, styles.deleteText]}>Delete</Text>
-                  </Pressable>
+                  </Pressable>}
                 </View>
               </View>
             );
@@ -113,6 +120,8 @@ const styles = StyleSheet.create({
   actionText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, textAlign: "center" },
   sendButton: { backgroundColor: colors.primarySoft },
   sendText: { color: colors.primary },
+  editButton: { backgroundColor: colors.secondarySoft },
+  editText: { color: colors.secondary },
   deleteButton: { backgroundColor: colors.dangerSoft },
   deleteText: { color: colors.danger },
 });

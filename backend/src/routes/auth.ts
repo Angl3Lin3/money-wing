@@ -20,6 +20,9 @@ const generateOTP = (): string => {
   return crypto.randomInt(100000, 1000000).toString();
 };
 
+// Shown when someone tries to use an account that was closed.
+const CLOSED_MESSAGE = 'This account has been closed. Contact MoneyWing if you need help.';
+
 const normalizeEmail = (email: unknown): string =>
   typeof email === 'string' ? email.trim().toLowerCase() : '';
 
@@ -58,6 +61,9 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     if (existing && existing.status === 'verified') {
       return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
+    }
+    if (existing && existing.status === 'closed') {
+      return res.status(400).json({ error: CLOSED_MESSAGE });
     }
 
     // An account that was never verified can sign up again: update the
@@ -100,6 +106,9 @@ router.post('/resend-otp', async (req: Request, res: Response) => {
     if (user.status === 'verified') {
       return res.status(400).json({ error: 'User is already verified. Please log in.' });
     }
+    if (user.status === 'closed') {
+      return res.status(400).json({ error: CLOSED_MESSAGE });
+    }
 
     await issueOtp(user.id, email);
     res.status(200).json({ message: 'A new code has been sent.' });
@@ -138,6 +147,9 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         // Check if user is already verified 
         if (user.status === 'verified') {
             return res.status(400).json({ error: 'User is already verified.'});
+        }
+        if (user.status === 'closed') {
+            return res.status(400).json({ error: CLOSED_MESSAGE });
         }
 
         const otpToken = user.otpTokens[0];
@@ -216,6 +228,9 @@ router.post('/login', async (req: Request, res: Response) => {
         }
 
         // 3. Check if user is verified 
+        if (user.status === 'closed') {
+            return res.status(400).json({ error: CLOSED_MESSAGE });
+        }
         if (user.status !== 'verified') {
             return res.status(400).json({ error: 'Please verify your email first'});
         }

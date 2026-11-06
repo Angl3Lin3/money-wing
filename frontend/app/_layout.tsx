@@ -43,6 +43,7 @@ export default function RootLayout() {
        <Stack.Screen name="review" options={{ title: 'Review Transfer' }}/>
        <Stack.Screen name="transfer/[id]" options={{ title: 'Transfer' }}/>
        <Stack.Screen name="history" options={{ title: 'Transfer History' }}/>
+       <Stack.Screen name="profile" options={{ title: 'Your Account' }}/>
        <Stack.Screen name="api-test" options={{ title: 'Developer area' }}/>
 
        {/* Developer area: dark header so it's never mistaken for the customer app */}

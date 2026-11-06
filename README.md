@@ -257,6 +257,26 @@ Every owner action (pricing changes and transfer updates) is saved permanently w
 
 **New endpoints** (all require a developer login): `GET /admin/overview`, `GET /admin/users`, `GET /admin/transactions?status=`, `GET /admin/activity`, `GET /admin/settings`, `PUT /admin/settings/pricing`, `GET /admin/transfer-actions`, `POST /admin/transactions/:id/action`, `GET /admin/audit?targetId=`.
 
+### 10. Customer account extras
+
+**Edit a recipient** (Recipients → **Edit**)
+- Fix a name at any time.
+- The number and network can be changed only until money has been sent to that person. After that they're locked, so transfer records always show where money actually went. To use a new number, add them as a new recipient.
+- Recipients with transfers no longer show a Delete button (deleting them would erase transfer records).
+
+**Your account** (Dashboard → **Your account**)
+- See your email, sign-up date, and how many recipients and transfers you have.
+- **Change password**: needs the current password; the new one must be at least 8 characters.
+- **Log out.**
+- **Delete account**: needs the password.
+  - If no money ever moved, the account and its data are **deleted**.
+  - If the customer has paid transfers, the account is **closed** instead: login is disabled for good, unpaid transfers are cancelled, and the transfer records are kept, because money transfer records must be kept.
+  - Closed accounts can't be reopened by signing up again.
+
+**Logins end when an account is gone:** every request now checks that the account still exists and isn't closed, so a deleted or closed account's saved login stops working straight away. *(Changing your password does not yet log out other devices.)*
+
+**New endpoints:** `PUT /transaction/recipients/:id`, `POST /user/change-password`, `POST /user/delete-account`. `GET /user/me` and `GET /transaction/recipients` now include counts.
+
 ---
 
 ## API reference
@@ -270,9 +290,12 @@ All endpoints except signup, login and the health check need the header `Authori
 | POST | `/auth/resend-otp` | Send a new code | **New** |
 | POST | `/auth/verify-otp` | Verify the code; returns a login token | Changed |
 | POST | `/auth/login` | Log in; returns a login token | Changed |
-| GET | `/user/me` | The logged-in user | |
+| GET | `/user/me` | The logged-in user, with recipient and transfer counts | Changed |
+| POST | `/user/change-password` | Change password (needs current password) | **New** |
+| POST | `/user/delete-account` | Delete the account, or close it if it has paid transfers | **New** |
 | GET | `/transaction/recipients` | List your recipients (newest first) | Changed |
 | POST | `/transaction/recipients` | Add a recipient (validates phone and network) | Changed |
+| PUT | `/transaction/recipients/:id` | Edit a recipient (number/network locked once money was sent) | **New** |
 | DELETE | `/transaction/recipients/:id` | Delete a recipient with no transfers | **New** |
 | GET | `/transaction/quote?cadAmount=100` | Fee, rate and UGX for an amount | Changed |
 | POST | `/transaction` | Create a transfer (`DRAFT`). Send `expectedUgxAmount` and `expectedFee` for the price lock (returns `409` if they changed) | Changed |
@@ -390,7 +413,7 @@ With the app running:
 
 - **Card payment** in the app: the backend endpoint exists, but the app's Pay button is disabled. *Next step.*
 - **Real emails** for signup codes. They only appear in the Terminal.
-- **Forgot password.**
+- **Forgot password** (needs real emails first).
 - **Real payouts** (Flutterwave). Payouts are simulated.
 - **Identity verification (KYC)** before sending. Currently mocked and not enforced.
 - **Online hosting** (Heroku or similar) so others can use it without running it locally.

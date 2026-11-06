@@ -124,14 +124,95 @@ router.get('/recipients', authenticateToken, async (req: AuthRequest, res: Respo
                 name: true,
                 phoneNumber: true,
                 network: true,
-                createdAt: true
+                createdAt: true,
+                _count: { select: { transactions: true } }
             }
         });
 
-        res.status(200).json({ recipients });
+        res.status(200).json({
+            recipients: recipients.map(({ _count, ...r }) => ({ ...r, transferCount: _count.transactions }))
+        });
     } catch(error: any) {
         console.error('Get recipients error:', error);
         res.status(500).json({ error: 'Failed to fetch recipients'});
+    }
+});
+
+// Endpoint-> "Edit a recipient"
+// The name can always be fixed. Once money has been sent to someone, their
+// number and network are locked so past transfer records stay accurate.
+router.put('/recipients/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId!;
+        const recipientId = req.params.id;
+        if (!recipientId) {
+            return res.status(400).json({ error: 'Recipient id is required'});
+        }
+
+        const recipient = await prisma.recipient.findFirst({
+            where: { id: recipientId, userId },
+            include: { _count: { select: { transactions: true } } }
+        });
+        if (!recipient) {
+            return res.status(404).json({ error: 'Recipient not found'});
+        }
+
+        const { name, phoneNumber, network } = req.body ?? {};
+        const trimmedName = typeof name === 'string' ? name.trim() : '';
+        if (!trimmedName || !phoneNumber || !network) {
+            return res.status(400).json({ error: 'Name, phone number, and network are required'});
+        }
+        if (trimmedName.length > 100) {
+            return res.status(400).json({ error: 'Name is too long'});
+        }
+        if (!VALID_NETWORKS.includes(network)) {
+            return res.status(400).json({ error: 'Network must be MTN or Airtel'});
+        }
+
+        const normalizedPhone = normalizeUgandaPhone(phoneNumber);
+        if (!normalizedPhone) {
+            return res.status(400).json({ error: 'Enter a valid Ugandan mobile number, e.g. 0772 123 456'});
+        }
+
+        const contactChanged = normalizedPhone !== recipient.phoneNumber || network !== recipient.network;
+        if (contactChanged && recipient._count.transactions > 0) {
+            return res.status(400).json({
+                error: 'Money has already been sent to this recipient, so their number and network can\'t change. Add them as a new recipient instead.'
+            });
+        }
+
+        const detectedNetwork = networkForPhone(normalizedPhone);
+        if (detectedNetwork && detectedNetwork !== network) {
+            return res.status(400).json({ error: `That number looks like ${detectedNetwork}, not ${network}. Please check the network.`});
+        }
+
+        if (normalizedPhone !== recipient.phoneNumber) {
+            const duplicate = await prisma.recipient.findFirst({
+                where: { userId, phoneNumber: normalizedPhone, NOT: { id: recipient.id } }
+            });
+            if (duplicate) {
+                return res.status(400).json({ error: `You already have a recipient with this number (${duplicate.name}).`});
+            }
+        }
+
+        const updated = await prisma.recipient.update({
+            where: { id: recipient.id },
+            data: { name: trimmedName, phoneNumber: normalizedPhone, network }
+        });
+
+        res.status(200).json({
+            message: 'Recipient updated',
+            recipient: {
+                id: updated.id,
+                name: updated.name,
+                phoneNumber: updated.phoneNumber,
+                network: updated.network,
+                transferCount: recipient._count.transactions
+            }
+        });
+    } catch(error: any) {
+        console.error('Update recipient error:', error);
+        res.status(500).json({ error: 'Failed to update recipient'});
     }
 });
 

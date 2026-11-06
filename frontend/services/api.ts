@@ -65,11 +65,26 @@ export const userAPI = {
     return response.data;
   },
 
-  updateProfile: async (data: any) => {
-    const response = await api.put('/user/profile', data);
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const response = await api.post('/user/change-password', { currentPassword, newPassword });
+    return response.data;
+  },
+
+  // Deletes the account, or closes it if it has paid transfers (records must be kept).
+  deleteAccount: async (password: string): Promise<{ result: 'deleted' | 'closed'; message: string }> => {
+    const response = await api.post('/user/delete-account', { password });
     return response.data;
   },
 };
+
+export interface Profile {
+  id: string;
+  email: string;
+  status: string;
+  createdAt: string;
+  recipientCount: number;
+  transferCount: number;
+}
 
 // KYC API calls
 export const kycAPI = {
@@ -114,6 +129,7 @@ export interface Recipient {
   phoneNumber: string;
   network: Network;
   createdAt?: string;
+  transferCount?: number; // how many transfers were made to this person
 }
 
 export const recipientAPI = {
@@ -124,6 +140,11 @@ export const recipientAPI = {
 
   add: async (name: string, phoneNumber: string, network: Network): Promise<Recipient> => {
     const response = await api.post('/transaction/recipients', { name, phoneNumber, network });
+    return response.data.recipient;
+  },
+
+  update: async (id: string, name: string, phoneNumber: string, network: Network): Promise<Recipient> => {
+    const response = await api.put(`/transaction/recipients/${id}`, { name, phoneNumber, network });
     return response.data.recipient;
   },
 

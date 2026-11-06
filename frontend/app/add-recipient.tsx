@@ -1,20 +1,49 @@
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, Stack, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { AppButton, Card, Screen, Subtitle, TextField, Title } from "../components/ui";
-import { guessNetwork } from "../constants/networks";
+import { AppButton, Card, Loading, Notice, Screen, Subtitle, TextField, Title } from "../components/ui";
+import { formatPhone, guessNetwork } from "../constants/networks";
 import { colors, fonts, fontSize, radius, spacing } from "../constants/theme";
 import { showAlert } from "../services/alert";
-import { getErrorMessage, Network, recipientAPI } from "../services/api";
+import { getErrorMessage, Network, Recipient, recipientAPI } from "../services/api";
 
 const NETWORKS: Network[] = ["MTN", "Airtel"];
 
+// Adds a recipient, or edits one when opened with ?id=<recipient id>.
 export default function AddRecipientScreen() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const editing = Boolean(id);
+
+  const [existing, setExisting] = useState<Recipient | null>(null);
+  const [loading, setLoading] = useState(editing);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [network, setNetwork] = useState<Network | null>(null);
-  const [networkTouched, setNetworkTouched] = useState(false);
+  const [networkTouched, setNetworkTouched] = useState(editing);
   const [saving, setSaving] = useState(false);
+
+  // When editing, load the recipient and fill in the form.
+  useEffect(() => {
+    if (!id) return;
+    recipientAPI
+      .list()
+      .then((list) => {
+        const r = list.find((x) => x.id === id);
+        if (!r) throw new Error("Recipient not found");
+        setExisting(r);
+        setName(r.name);
+        setPhone(formatPhone(r.phoneNumber));
+        setNetwork(r.network);
+      })
+      .catch((e) => {
+        showAlert("Could not open recipient", getErrorMessage(e, "Recipient not found"));
+        router.replace("/recipients");
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  // Once money has been sent to someone, their number and network can't change.
+  const contactLocked = Boolean(existing && (existing.transferCount ?? 0) > 0);
 
   const onPhoneChange = (value: string) => {
     setPhone(value);
@@ -30,22 +59,34 @@ export default function AddRecipientScreen() {
 
     setSaving(true);
     try {
-      await recipientAPI.add(name.trim(), phone, network);
+      if (existing) await recipientAPI.update(existing.id, name.trim(), phone, network);
+      else await recipientAPI.add(name.trim(), phone, network);
       // Back to the previous screen (it reloads when shown). If this screen was
       // opened directly, there's nothing to go back to, so open the list instead.
       if (router.canGoBack()) router.back();
       else router.replace("/recipients");
     } catch (e: any) {
-      showAlert("Could not add recipient", getErrorMessage(e, "Please try again."));
+      showAlert(editing ? "Could not save changes" : "Could not add recipient", getErrorMessage(e, "Please try again."));
     } finally {
       setSaving(false);
     }
   };
 
+  if (loading) return <Loading />;
+
   return (
     <Screen>
-      <Title>Add a recipient</Title>
-      <Subtitle>Who will receive the money in Uganda?</Subtitle>
+      <Stack.Screen options={{ title: editing ? "Edit Recipient" : "Add Recipient" }} />
+      <Title>{editing ? "Edit recipient" : "Add a recipient"}</Title>
+      <Subtitle>{editing ? "Fix a name or update their details." : "Who will receive the money in Uganda?"}</Subtitle>
+
+      {contactLocked && (
+        <Notice tone="info">
+          You&apos;ve already sent money to {existing!.name}, so their number and network can&apos;t change (your
+          transfer records must show where the money went). You can still fix their name. To use a different number,
+          add them as a new recipient.
+        </Notice>
+      )}
 
       <Card>
         <TextField label="Full name" placeholder="e.g. Grace Nakato" value={name} onChangeText={setName} autoComplete="name" />
@@ -55,7 +96,9 @@ export default function AddRecipientScreen() {
           value={phone}
           onChangeText={onPhoneChange}
           keyboardType="phone-pad"
-          hint="We'll pick the network from the number. You can change it below."
+          editable={!contactLocked}
+          style={contactLocked && styles.locked}
+          hint={contactLocked ? undefined : "We'll pick the network from the number. You can change it below."}
         />
 
         <Text style={styles.label}>Mobile money network</Text>
@@ -65,13 +108,14 @@ export default function AddRecipientScreen() {
             return (
               <Pressable
                 key={n}
+                disabled={contactLocked}
                 onPress={() => {
                   setNetwork(n);
                   setNetworkTouched(true);
                 }}
-                style={[styles.networkOption, selected && styles.networkSelected]}
+                style={[styles.networkOption, selected && styles.networkSelected, contactLocked && !selected && styles.networkDisabled]}
                 accessibilityRole="radio"
-                accessibilityState={{ selected }}
+                accessibilityState={{ selected, disabled: contactLocked }}
               >
                 <View style={[styles.dot, { backgroundColor: n === "MTN" ? colors.accent : "#e40000" }]} />
                 <Text style={[styles.networkText, selected && styles.networkTextSelected]}>{n}</Text>
@@ -80,7 +124,7 @@ export default function AddRecipientScreen() {
           })}
         </View>
 
-        <AppButton title="Save recipient" onPress={save} loading={saving} />
+        <AppButton title={editing ? "Save changes" : "Save recipient"} onPress={save} loading={saving} />
       </Card>
     </Screen>
   );
@@ -102,7 +146,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   networkSelected: { borderColor: colors.secondary, backgroundColor: colors.secondarySoft },
+  networkDisabled: { opacity: 0.4 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   networkText: { fontFamily: fonts.semibold, fontSize: fontSize.base, color: colors.textSecondary },
   networkTextSelected: { color: colors.secondary },
+  locked: { color: colors.textMuted },
 });
