@@ -5,6 +5,8 @@ import { PrismaClient, TransactionStatus } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { adminEmails, requireAdmin } from '../middleware/admin';
 import { getActivity } from '../services/monitor.service';
+import { emailSetupSummary, getOutbox, sendEmailInBackground } from '../services/email.service';
+import { transferCancelledEmail, transferDeliveredEmail, transferFailedEmail } from '../services/email.templates';
 import { getPricing, getPricingInfo, PricingError, savePricing } from '../services/pricing.service';
 
 const router = express.Router();
@@ -64,7 +66,7 @@ router.get('/overview', async (_req: AuthRequest, res: Response) => {
                 stripeSecretKey: keyStatus(process.env.STRIPE_SECRET_KEY),
                 stripeWebhookSecret: keyStatus(process.env.STRIPE_WEBHOOK_SECRET),
                 payoutProvider: process.env.PAYOUT_PROVIDER ?? 'mock',
-                emailProvider: process.env.RESEND_API_KEY ? 'set' : 'not set (codes printed in server window)',
+                emailProvider: emailSetupSummary(),
                 adminCount: adminEmails().length,
                 pricing: await getPricing(),
             },
@@ -260,6 +262,21 @@ router.post('/transactions/:id/action', async (req: AuthRequest, res: Response) 
             return res.status(409).json({ error: 'This transfer was just changed by someone else. Refresh and try again.' });
         }
 
+        // Let the customer know about outcomes that matter to them.
+        if (action === 'mark_delivered' || action === 'mark_failed' || action === 'cancel') {
+            const t = await prisma.transaction.findUnique({
+                where: { id },
+                include: { user: { select: { email: true } }, recipient: { select: { name: true, phoneNumber: true, network: true } } },
+            });
+            if (t) {
+                const email =
+                    action === 'mark_delivered' ? transferDeliveredEmail(t.user.email, t, reference)
+                    : action === 'mark_failed' ? transferFailedEmail(t.user.email, t, note)
+                    : transferCancelledEmail(t.user.email, t);
+                sendEmailInBackground(email);
+            }
+        }
+
         await audit(req.adminEmail!, `transfer.${action}`, id, {
             from: current.status,
             to: rule.to,
@@ -282,6 +299,12 @@ router.get('/transfer-actions', (_req: AuthRequest, res: Response) => {
             .filter(([, rule]) => !(rule.devOnly && production))
             .map(([action, rule]) => ({ action, from: rule.from, to: rule.to, needs: rule.needs ?? null }))
     );
+});
+
+// Recent emails. When no email service is set up, includes their full text
+// (so you can read codes while testing); otherwise only who/what/whether sent.
+router.get('/emails', (_req: AuthRequest, res: Response) => {
+    res.json(getOutbox());
 });
 
 // Recent owner actions, newest first. Optional ?targetId= for one transfer.

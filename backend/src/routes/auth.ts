@@ -3,6 +3,8 @@ import express, { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { isEmailConfigured, sendEmail, sendEmailInBackground } from '../services/email.service';
+import { passwordChangedEmail, passwordResetCodeEmail, verificationCodeEmail } from '../services/email.templates';
 import jwt from 'jsonwebtoken';
 
 const router = express.Router();
@@ -26,24 +28,52 @@ const CLOSED_MESSAGE = 'This account has been closed. Contact MoneyWing if you n
 const normalizeEmail = (email: unknown): string =>
   typeof email === 'string' ? email.trim().toLowerCase() : '';
 
-// Replace any old codes for this user with a fresh one.
-// For now the code is printed in the server terminal (no email service yet).
-const issueOtp = async (userId: string, email: string): Promise<void> => {
-  const otpCode = generateOTP();
-  const otpHash = await bcrypt.hash(otpCode, 8);
+// Codes are 6 digits, valid for 10 minutes. After 5 wrong tries a code stops
+// working, so nobody can guess their way in.
+const MAX_CODE_ATTEMPTS = 5;
+const wrongAttempts = new Map<string, number>(); // code id -> wrong tries
+
+type CodePurpose = 'signup' | 'password-reset';
+
+// Replace any old codes of this kind with a fresh one and email it.
+const issueCode = async (userId: string, email: string, purpose: CodePurpose): Promise<void> => {
+  const code = generateOTP();
+  const tokenHash = await bcrypt.hash(code, 8);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
 
-  await prisma.otpToken.deleteMany({ where: { userId, purpose: 'signup' } });
+  await prisma.otpToken.deleteMany({ where: { userId, purpose } });
   await prisma.otpToken.create({
-    data: {
-      tokenHash: otpHash,
-      expiresAt,
-      user: { connect: { id: userId } },
-    },
+    data: { tokenHash, expiresAt, purpose, user: { connect: { id: userId } } },
   });
 
-  console.log(`💸 MoneyWing Signup OTP for ${email}: ${otpCode}`);
-  console.log(`⏰ OTP expires at: ${expiresAt.toLocaleTimeString()}`);
+  if (!isEmailConfigured()) {
+    console.log(`💸 MoneyWing ${purpose} code for ${email}: ${code} (expires ${expiresAt.toLocaleTimeString()})`);
+  }
+  await sendEmail(purpose === 'signup' ? verificationCodeEmail(email, code) : passwordResetCodeEmail(email, code));
+};
+
+const issueOtp = (userId: string, email: string) => issueCode(userId, email, 'signup');
+
+// Checks a code. Returns null if it's right, otherwise the error to show.
+// Wrong tries are counted; the 5th wrong try deletes the code.
+const checkCode = async (token: { id: string; tokenHash: string; expiresAt: Date } | undefined, code: string): Promise<string | null> => {
+  if (!token) return 'No code found. Please request a new one.';
+  if (new Date() > token.expiresAt) {
+    await prisma.otpToken.delete({ where: { id: token.id } }).catch(() => {});
+    return 'Code has expired. Please request a new one.';
+  }
+  if (await bcrypt.compare(code, token.tokenHash)) {
+    wrongAttempts.delete(token.id);
+    return null;
+  }
+  const tries = (wrongAttempts.get(token.id) ?? 0) + 1;
+  if (tries >= MAX_CODE_ATTEMPTS) {
+    wrongAttempts.delete(token.id);
+    await prisma.otpToken.delete({ where: { id: token.id } }).catch(() => {});
+    return 'Too many wrong tries. Please request a new code.';
+  }
+  wrongAttempts.set(token.id, tries);
+  return `That code isn't right. ${MAX_CODE_ATTEMPTS - tries} ${MAX_CODE_ATTEMPTS - tries === 1 ? 'try' : 'tries'} left.`;
 };
 
 router.post('/signup', async (req: Request, res: Response) => {
@@ -87,6 +117,9 @@ router.post('/signup', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'User with this email already exists' });
     }
 
+    if (error?.code === 'EENVELOPE' || error?.responseCode || error?.command) {
+      return res.status(502).json({ error: 'We could not send the verification email. Please try again in a moment.' });
+    }
     res.status(500).json({ error: 'Internal server error during signup' });
   }
 });
@@ -114,6 +147,9 @@ router.post('/resend-otp', async (req: Request, res: Response) => {
     res.status(200).json({ message: 'A new code has been sent.' });
   } catch (error: any) {
     console.error('Resend OTP error:', error);
+    if (error?.code === 'EENVELOPE' || error?.responseCode || error?.command) {
+      return res.status(502).json({ error: 'We could not send the email. Please try again in a moment.' });
+    }
     res.status(500).json({ error: 'Internal server error while resending code' });
   }
 });
@@ -134,6 +170,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
             where: { email },
             include: {
                 otpTokens: {
+                    where: { purpose: 'signup' },
                     orderBy: { createdAt: 'desc'},
                     take: 1
                 }
@@ -152,23 +189,10 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
             return res.status(400).json({ error: CLOSED_MESSAGE });
         }
 
-        const otpToken = user.otpTokens[0];
-
-        // 2. Check if OTP exists and is not expired 
-        if(!otpToken) {
-            return res.status(400).json({ error: 'No OTP found for this user.'});
-        }
-
-        if (new Date() > otpToken.expiresAt) {
-            // Clean up expired token 
-            await prisma.otpToken.delete({ where: {id: otpToken.id } });
-            return res.status(400).json({ error: 'Code has expired. Please request a new one.'});
-        }
-
-        // 3. Validate OTP code 
-        const isValid = await bcrypt.compare(otpCode, otpToken.tokenHash);
-        if (!isValid) {
-            return res.status(400).json({ error: 'Invalid OTP code.'});
+        // 2. Check the code (expiry and the 5-try limit included)
+        const codeError = await checkCode(user.otpTokens[0], otpCode);
+        if (codeError) {
+            return res.status(400).json({ error: codeError });
         }
 
         // 4. Update user status to "verified"
@@ -181,7 +205,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         const token = generateJWT(user.id);
 
         // 6. Clean up the used OTP token 
-        await prisma.otpToken.delete({ where: { id: otpToken.id }});
+        await prisma.otpToken.deleteMany({ where: { userId: user.id, purpose: 'signup' } });
 
         // 7. Respond with success and token
         res.status(200).json({
@@ -201,6 +225,76 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
     
 });
 
+
+// Forgot password, step 1: email a reset code.
+// Always answers the same way, so nobody can use it to find out which emails
+// have accounts.
+router.post('/forgot-password', async (req: Request, res: Response) => {
+    const generic = { message: 'If an account exists for that email, we sent it a code.' };
+    try {
+        const email = normalizeEmail(req.body.email);
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { email },
+            include: { otpTokens: { where: { purpose: 'password-reset' }, orderBy: { createdAt: 'desc' }, take: 1 } },
+        });
+        if (!user || user.status !== 'verified') {
+            return res.status(200).json(generic);
+        }
+
+        // At most one code a minute, so the button can't be used to spam someone.
+        const last = user.otpTokens[0];
+        if (last && Date.now() - last.createdAt.getTime() < 60 * 1000) {
+            return res.status(200).json(generic);
+        }
+
+        await issueCode(user.id, email, 'password-reset');
+        res.status(200).json(generic);
+    } catch (error: any) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ error: 'Could not send a reset code. Please try again.' });
+    }
+});
+
+// Forgot password, step 2: check the code and set the new password.
+router.post('/reset-password', async (req: Request, res: Response) => {
+    try {
+        const email = normalizeEmail(req.body.email);
+        const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+        const { newPassword } = req.body;
+        if (!email || !code || typeof newPassword !== 'string') {
+            return res.status(400).json({ error: 'Email, code and new password are required' });
+        }
+        if (newPassword.length < 8) {
+            return res.status(400).json({ error: 'The new password must be at least 8 characters' });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { email },
+            include: { otpTokens: { where: { purpose: 'password-reset' }, orderBy: { createdAt: 'desc' }, take: 1 } },
+        });
+        if (!user || user.status !== 'verified') {
+            return res.status(400).json({ error: 'No code found. Please request a new one.' });
+        }
+
+        const codeError = await checkCode(user.otpTokens[0], code);
+        if (codeError) {
+            return res.status(400).json({ error: codeError });
+        }
+
+        await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } });
+        await prisma.otpToken.deleteMany({ where: { userId: user.id, purpose: 'password-reset' } });
+        sendEmailInBackground(passwordChangedEmail(email));
+
+        res.status(200).json({ message: 'Password reset. You can log in with your new password.' });
+    } catch (error: any) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ error: 'Could not reset the password. Please try again.' });
+    }
+});
 
 router.post('/login', async (req: Request, res: Response) => {
     try {

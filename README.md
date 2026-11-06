@@ -4,7 +4,7 @@ A mobile app for sending money from **Canada (CAD)** to **Uganda (UGX)**. Custom
 
 This is a fork of the original MoneyWing project. This README explains how to run the app and **everything that has been added since the original version**.
 
-> **Status:** working demo. Customers can sign up, manage recipients, get a quote, create transfers and manage their account. The owner can set the rate and fee and record payouts by hand in the developer area. **Card payment and automatic payouts are not connected yet**, so no real money moves, and the app shows a "Demo version" banner on every screen.
+> **Status:** working demo. Customers can sign up, reset a forgotten password, manage recipients, get a quote, create transfers, get email updates and manage their account. The owner can set the rate and fee and record payouts by hand in the developer area. **Card payment and automatic payouts are not connected yet**, so no real money moves, and the app shows a "Demo version" banner on every screen.
 
 ---
 
@@ -67,7 +67,7 @@ Double-click **`start-dev.command`** in the main folder. It:
 3. starts the server on `http://localhost:3000`,
 4. starts the app and opens it in your browser.
 
-Keep that Terminal window open while you work. **Signup codes appear in this window** as a line starting with 💸, because emails aren't sent yet. Close the window to stop everything.
+Keep that Terminal window open while you work, and close it to stop everything. Until an email service is set up (see [Emails](#11-emails-and-forgot-password)), emails aren't really sent: signup and reset codes appear in this window as a line starting with 💸, and every email can be read in the developer area's **Emails** tab.
 
 > If macOS says it can't open the file, right-click it → **Open** → **Open** (only needed once).
 
@@ -277,6 +277,35 @@ Every owner action (pricing changes and transfer updates) is saved permanently w
 
 **New endpoints:** `PUT /transaction/recipients/:id`, `POST /user/change-password`, `POST /user/delete-account`. `GET /user/me` and `GET /transaction/recipients` now include counts.
 
+### 11. Emails and Forgot password
+
+**Emails customers get**
+
+| When | Email |
+| --- | --- |
+| Signing up / Resend code | 6-digit verification code |
+| Forgot password | 6-digit reset code |
+| Password changed (from Your account or a reset) | Security alert |
+| Transfer created | Receipt with all the amounts |
+| Owner marks it **delivered** | "Money delivered", with the mobile money reference |
+| Owner marks it **failed** | "Problem with your transfer", with the reason |
+| Transfer cancelled | "Transfer cancelled, you haven't been charged" |
+| Account deleted / closed | Confirmation |
+
+Each email has the MoneyWing header and a plain-text version. The wording is all in `backend/src/services/email.templates.ts`.
+
+**Sending for real vs. testing**
+- **No email service set (the default):** nothing is sent. Codes are printed in the server window, and every email can be read in full in the developer area's **Emails** tab.
+- **Email service set** (`SMTP_HOST` etc. in `backend/.env`; see `.env.example` for Gmail, Resend and Mailtrap examples): emails are really sent. The Emails tab then only lists who/what/whether it was sent, never the contents. If the service refuses an email, signup says so instead of silently failing.
+- Which service and sender address to use is the **owner's decision**. Sending from the business's own domain (e.g. `hello@moneywingapp.com`) is the most trustworthy, but needs access to the domain's settings.
+
+**Forgot password**
+- **Forgot password?** on the login screen → enter email → enter the emailed code and a new password (8+ characters).
+- The answer is the same whether or not an account exists, so nobody can use it to check which emails are registered.
+- At most one code per minute per account. Codes expire after 10 minutes and work once.
+
+**Code guessing protection:** signup and reset codes stop working after **5 wrong tries** ("Too many wrong tries. Please request a new code."), so a 6-digit code can't be guessed.
+
 ---
 
 ## API reference
@@ -290,6 +319,8 @@ All endpoints except signup, login and the health check need the header `Authori
 | POST | `/auth/resend-otp` | Send a new code | **New** |
 | POST | `/auth/verify-otp` | Verify the code; returns a login token | Changed |
 | POST | `/auth/login` | Log in; returns a login token | Changed |
+| POST | `/auth/forgot-password` | Email a password reset code (same answer whether or not the account exists) | **New** |
+| POST | `/auth/reset-password` | Set a new password with the emailed code | **New** |
 | GET | `/user/me` | The logged-in user, with recipient and transfer counts | Changed |
 | POST | `/user/change-password` | Change password (needs current password) | **New** |
 | POST | `/user/delete-account` | Delete the account, or close it if it has paid transfers | **New** |
@@ -321,6 +352,10 @@ The settings file is `backend/.env`. **It holds secrets and is never committed t
 | `MIN_SEND_CAD` | | `5` | Smallest transfer |
 | `MAX_SEND_CAD` | | `3000` | Largest transfer |
 | `ADMIN_EMAILS` | For developer area | | Comma-separated emails allowed into the developer area |
+| `SMTP_HOST` | For real emails | | Email service's SMTP server. Empty = emails shown in the developer area instead of sent |
+| `SMTP_PORT` / `SMTP_SECURE` | | `587` / `false` | Use `465` / `true` for services that require it |
+| `SMTP_USER` / `SMTP_PASS` | For real emails | | Email service login (e.g. Gmail address + app password) |
+| `EMAIL_FROM` | For real emails | | Sender, e.g. `MoneyWing <hello@yourdomain.com>` |
 | `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD` | | | Local only: auto-created developer account |
 | `STRIPE_SECRET_KEY` | For payments | | Stripe test key (`sk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | For payments | | Stripe webhook secret (`whsec_...`) |
@@ -366,6 +401,8 @@ money-wing/
 │       │   ├── pricing.service.ts ★ rate, fee, limits (owner-set or defaults), quote maths
 │       │   ├── monitor.service.ts ★ recent requests and errors for the Activity tab
 │       │   ├── dev-admin.service.ts ★ local developer account from .env
+│       │   ├── email.service.ts   ★ sends emails (or keeps them for the Emails tab)
+│       │   ├── email.templates.ts ★ the wording of every email
 │       │   ├── stripe.service.ts
 │       │   └── payout.manager.ts  (mock payouts)
 │       └── utils/phone.ts       ★ Uganda phone number checks
@@ -375,6 +412,7 @@ money-wing/
     │   ├── index.tsx              welcome
     │   ├── signup.tsx, otp.tsx
     │   ├── login.tsx            ★
+    │   ├── forgot-password.tsx  ★ reset password with an emailed code
     │   ├── dashboard.tsx
     │   ├── recipients.tsx       ★
     │   ├── add-recipient.tsx    ★ add or edit a recipient
@@ -411,7 +449,7 @@ money-wing/
 
 With the app running:
 
-1. **Sign up:** Create account → copy the 💸 code from the Terminal window → Verify. You land on the dashboard.
+1. **Sign up:** Create account → copy the 💸 code from the Terminal window (or the developer area's **Emails** tab) → Verify. You land on the dashboard.
 2. **Stay logged in:** refresh the browser. You're still on the dashboard.
 3. **Log out and log in** again.
 4. **Recipients:**
@@ -425,14 +463,15 @@ With the app running:
 10. **Your account:** Dashboard → Your account → change your password, log out, and log in with the new one. Delete a throwaway account to check it's removed.
 11. **Developer area:** go to `localhost:8081/dev-login` and log in with your `DEV_ADMIN_EMAIL` account. Check the Overview numbers, run **API checks**, and watch **Activity** while you use the app in another tab.
 12. **Owner controls:** change the rate in **Owner controls** and check the Send Money screen uses it. Then, in **Transfers**, tap **Manage** on a transfer: Simulate payment → Start sending → Mark delivered. The customer's history shows **Delivered**, and the action appears in **Recent owner actions**.
+13. **Forgot password:** Log in → Forgot password? → enter your email → read the code in the developer area's **Emails** tab → set a new password and log in with it.
+14. **Emails:** make a transfer and mark it delivered in Owner controls, then check the **Emails** tab for the receipt and the "Money delivered" email.
 
 ---
 
 ## Not done yet
 
 - **Card payment** in the app: the backend endpoint exists, but the app's Pay button is disabled. *Next step.*
-- **Real emails** for signup codes. They only appear in the Terminal.
-- **Forgot password** (needs real emails first).
+- **Choosing an email service** for real sending (the owner's decision, ideally from the business's own domain). Everything is built; it only needs the `SMTP_` settings.
 - **Real payouts** (Flutterwave). Payouts are simulated.
 - **Identity verification (KYC)** before sending. Currently mocked and not enforced.
 - **Online hosting** (Heroku or similar) so others can use it without running it locally.

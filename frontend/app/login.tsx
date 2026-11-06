@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { useState } from "react";
+import { StyleSheet, View } from "react-native";
 import PasswordInput from "../components/PasswordInput";
 import { AppButton, Card, Screen, Spacer, Subtitle, TextField, TextLink, Title } from "../components/ui";
 import { showAlert } from "../services/alert";
@@ -63,6 +64,11 @@ export default function LoginScreen() {
           onChangeText={setPassword}
           onSubmitEditing={handleLogin}
         />
+        <View style={styles.forgot}>
+          <TextLink onPress={() => router.push({ pathname: "/forgot-password", params: { email: email.trim() } })}>
+            Forgot password?
+          </TextLink>
+        </View>
         <AppButton title="Log in" onPress={handleLogin} loading={loading} />
       </Card>
 
@@ -71,3 +77,7 @@ export default function LoginScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  forgot: { alignItems: "flex-end", marginTop: -6, marginBottom: 16 },
+});

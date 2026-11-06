@@ -106,7 +106,20 @@ export interface AuditEntry {
   createdAt: string;
 }
 
+export interface OutboxEmail {
+  id: number;
+  time: string;
+  to: string;
+  subject: string;
+  status: 'sent' | 'failed' | 'not sent (no email service)';
+  error?: string;
+  text?: string;
+}
+
 export const adminAPI = {
+  emails: async (): Promise<{ configured: boolean; setup: string; emails: OutboxEmail[] }> =>
+    (await adminApi.get('/admin/emails')).data,
+
   // Owner controls
   settings: async (): Promise<PricingInfo> => (await adminApi.get('/admin/settings')).data,
   savePricing: async (pricing: Pricing): Promise<PricingInfo> =>

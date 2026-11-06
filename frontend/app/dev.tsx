@@ -23,13 +23,14 @@ import { confirmAction } from "../services/alert";
 import { getErrorMessage, TransactionStatus } from "../services/api";
 import { clearDevToken } from "../services/auth-storage";
 
-type Tab = "overview" | "owner" | "checks" | "transfers" | "users" | "activity";
+type Tab = "overview" | "owner" | "checks" | "transfers" | "users" | "emails" | "activity";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "owner", label: "Owner controls" },
   { key: "checks", label: "API checks" },
   { key: "transfers", label: "Transfers" },
   { key: "users", label: "Users" },
+  { key: "emails", label: "Emails" },
   { key: "activity", label: "Activity" },
 ];
 
@@ -56,6 +57,7 @@ export default function DevDashboard() {
   const [statusFilter, setStatusFilter] = useState<TransactionStatus | undefined>(undefined);
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
+  const [emails, setEmails] = useState<EmailsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -74,6 +76,7 @@ export default function DevDashboard() {
       if (tab === "transfers") setTransfers(await adminAPI.transactions(statusFilter));
       if (tab === "users") setUsers(await adminAPI.users());
       if (tab === "activity") setActivity(await adminAPI.activity());
+      if (tab === "emails") setEmails(await adminAPI.emails());
       setUpdatedAt(new Date());
     } catch (e: any) {
       const status = e?.response?.status;
@@ -136,6 +139,7 @@ export default function DevDashboard() {
         <TransfersTab data={transfers} filter={statusFilter} onFilter={setStatusFilter} onChanged={load} />
       )}
       {tab === "users" && (users ? <UsersTab data={users} /> : <Loading />)}
+      {tab === "emails" && (emails ? <EmailsTab data={emails} /> : <Loading />)}
       {tab === "activity" && (activity ? <ActivityTab data={activity} /> : <Loading />)}
     </Screen>
   );
@@ -639,6 +643,59 @@ function UsersTab({ data }: { data: AdminUser[] }) {
   );
 }
 
+// ---------- Emails ----------
+
+type EmailsData = Awaited<ReturnType<typeof adminAPI.emails>>;
+
+function EmailsTab({ data }: { data: EmailsData }) {
+  const [openId, setOpenId] = useState<number | null>(null);
+  return (
+    <>
+      <Notice tone={data.configured ? "success" : "info"}>
+        {data.configured
+          ? `Email is set up (${data.setup}). Emails are really sent; their contents aren't kept here.`
+          : "No email service is set up, so emails aren't sent. They're shown here instead. Tap one to read it (codes included)."}
+      </Notice>
+      <Card>
+        {data.emails.length === 0 ? (
+          <Caption>No emails since the server started.</Caption>
+        ) : (
+          data.emails.map((e, i) => {
+            const tone =
+              e.status === "sent"
+                ? { color: colors.success, background: colors.successSoft, label: "Sent" }
+                : e.status === "failed"
+                ? { color: colors.danger, background: colors.dangerSoft, label: "Failed" }
+                : { color: colors.secondary, background: colors.secondarySoft, label: "Not sent" };
+            return (
+              <View key={e.id} style={i > 0 && styles.rowBorder}>
+                <Pressable
+                  onPress={() => setOpenId(openId === e.id ? null : e.id)}
+                  disabled={!e.text && !e.error}
+                  style={({ pressed }) => [styles.listRow, pressed && { opacity: 0.6 }]}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>{e.subject}</Text>
+                    <Text style={styles.rowSub} numberOfLines={1}>To {e.to} · {timeAgo(e.time)}</Text>
+                  </View>
+                  <Badge label={tone.label} color={tone.color} background={tone.background} />
+                </Pressable>
+                {openId === e.id && (
+                  <View style={styles.panel}>
+                    {e.error && <Text style={styles.logError}>{e.error}</Text>}
+                    {e.text && <Text style={styles.emailText}>{e.text}</Text>}
+                  </View>
+                )}
+              </View>
+            );
+          })
+        )}
+      </Card>
+      <Caption center>The last 50 emails since the server started.</Caption>
+    </>
+  );
+}
+
 // ---------- Activity ----------
 
 function ActivityTab({ data }: { data: Activity }) {
@@ -731,4 +788,5 @@ const styles = StyleSheet.create({
   previewValue: { fontFamily: fonts.bold, fontSize: fontSize.base, color: colors.text, marginTop: 2 },
   auditRow: { paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   auditText: { fontFamily: fonts.regular, fontSize: fontSize.base, color: colors.text },
+  emailText: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.text, lineHeight: 20 },
 });

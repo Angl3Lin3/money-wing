@@ -4,6 +4,8 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { normalizeUgandaPhone, networkForPhone, VALID_NETWORKS } from '../utils/phone';
 import { calculateQuote, QuoteError } from '../services/pricing.service';
+import { sendEmailInBackground } from '../services/email.service';
+import { transferCreatedEmail } from '../services/email.templates';
 
 
 
@@ -344,6 +346,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
                 }
             }
         });
+
+        // Email a receipt (in the background: a slow email never delays the app).
+        const owner = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+        if (owner) sendEmailInBackground(transferCreatedEmail(owner.email, transaction));
 
         res.status(201).json({
             message: 'Transaction created successfully',

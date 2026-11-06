@@ -47,6 +47,17 @@ export const authAPI = {
     return response.data;
   },
 
+  // Forgot password: step 1 emails a code, step 2 sets the new password.
+  forgotPassword: async (email: string): Promise<{ message: string }> => {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (email: string, code: string, newPassword: string): Promise<{ message: string }> => {
+    const response = await api.post('/auth/reset-password', { email, code, newPassword });
+    return response.data;
+  },
+
   verifyOTP: async (email: string, otpCode: string) => {
     const response = await api.post('/auth/verify-otp', { email, otpCode });
     return response.data;

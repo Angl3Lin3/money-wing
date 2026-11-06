@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { PrismaClient, TransactionStatus } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { sendEmailInBackground } from '../services/email.service';
+import { accountRemovedEmail, passwordChangedEmail } from '../services/email.templates';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -60,6 +62,7 @@ router.post('/change-password', authenticateToken, async (req: AuthRequest, res:
             where: { id: user.id },
             data: { passwordHash: await bcrypt.hash(newPassword, 12) },
         });
+        sendEmailInBackground(passwordChangedEmail(user.email)); // security alert
         res.status(200).json({ message: 'Password changed' });
     } catch (error: any) {
         console.error('Change password error:', error);
@@ -88,6 +91,7 @@ router.post('/delete-account', authenticateToken, async (req: AuthRequest, res: 
             // Removes the user and (through the database) their recipients,
             // unpaid transfers and codes.
             await prisma.user.delete({ where: { id: user.id } });
+            sendEmailInBackground(accountRemovedEmail(user.email, 'deleted'));
             return res.status(200).json({ result: 'deleted', message: 'Your account and data have been deleted.' });
         }
 
@@ -104,6 +108,7 @@ router.post('/delete-account', authenticateToken, async (req: AuthRequest, res: 
                 data: { status: 'CANCELLED' },
             }),
         ]);
+        sendEmailInBackground(accountRemovedEmail(user.email, 'closed'));
         res.status(200).json({
             result: 'closed',
             message: 'Your account has been closed. Records of your past transfers are kept, as the law requires for money transfers.',

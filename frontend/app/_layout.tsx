@@ -36,6 +36,7 @@ export default function RootLayout() {
 
        <Stack.Screen name="signup" options={{ title: 'Create Account' }}/>
        <Stack.Screen name="login" options={{ title: 'Log In' }}/>
+       <Stack.Screen name="forgot-password" options={{ title: 'Reset Password' }}/>
        <Stack.Screen name="otp" options={{ title: 'Verify Email'}}/>
        <Stack.Screen name="recipients" options={{ title: 'Recipients' }}/>
        <Stack.Screen name="add-recipient" options={{ title: 'Add Recipient' }}/>
