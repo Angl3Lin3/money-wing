@@ -4,7 +4,7 @@ A mobile app for sending money from **Canada (CAD)** to **Uganda (UGX)**. Custom
 
 This is a fork of the original MoneyWing project. This README explains how to run the app and **everything that has been added since the original version**.
 
-> **Status:** working demo. You can sign up, add recipients, get a quote, and create a transfer. **Card payment and real payouts are not connected yet**, so no real money moves.
+> **Status:** working demo. Customers can sign up, manage recipients, get a quote, create transfers and manage their account. The owner can set the rate and fee and record payouts by hand in the developer area. **Card payment and automatic payouts are not connected yet**, so no real money moves, and the app shows a "Demo version" banner on every screen.
 
 ---
 
@@ -333,6 +333,8 @@ While MoneyWing isn't live, every screen shows a gold **"Demo version: no real m
 
 The **Developer area** link on the welcome screen only appears while developing, never in a released app.
 
+While in demo mode the welcome screen only lists what the app can do today (card payments are shown as "coming soon").
+
 ---
 
 ## Project structure
@@ -344,19 +346,26 @@ money-wing/
 ├── start-dev.command            ★ double-click to start everything (Mac)
 ├── backend/
 │   ├── .env.example             ★ settings template
-│   ├── scripts/setup-db.sh      ★ creates the database and tables
+│   ├── scripts/setup-db.sh      ★ creates the database, applies table changes
 │   ├── prisma/
 │   │   ├── schema.prisma          database tables
-│   │   └── migrations/          ★ table definitions for teammates
+│   │   └── migrations/          ★ table changes (init, owner_controls)
 │   └── src/
 │       ├── index.ts               starts the server (loads .env first)
-│       ├── app.ts                 routes + health check
+│       ├── app.ts                 routes, health check, request monitor
+│       ├── middleware/
+│       │   ├── auth.ts            checks the login (and that the account is open)
+│       │   └── admin.ts         ★ developer-area access (ADMIN_EMAILS)
 │       ├── routes/
 │       │   ├── auth.ts            signup, codes, login
+│       │   ├── user.ts            account, change password, delete account
 │       │   ├── transaction.ts     recipients, quotes, transfers, history
+│       │   ├── admin.ts         ★ developer area + owner controls
 │       │   └── webhooks.ts        Stripe callbacks
 │       ├── services/
-│       │   ├── pricing.service.ts ★ rate, fee, limits, quote maths
+│       │   ├── pricing.service.ts ★ rate, fee, limits (owner-set or defaults), quote maths
+│       │   ├── monitor.service.ts ★ recent requests and errors for the Activity tab
+│       │   ├── dev-admin.service.ts ★ local developer account from .env
 │       │   ├── stripe.service.ts
 │       │   └── payout.manager.ts  (mock payouts)
 │       └── utils/phone.ts       ★ Uganda phone number checks
@@ -368,11 +377,15 @@ money-wing/
     │   ├── login.tsx            ★
     │   ├── dashboard.tsx
     │   ├── recipients.tsx       ★
-    │   ├── add-recipient.tsx    ★
+    │   ├── add-recipient.tsx    ★ add or edit a recipient
     │   ├── send.tsx             ★
     │   ├── review.tsx           ★
     │   ├── transfer/[id].tsx    ★ one transfer's details
-    │   └── history.tsx          ★
+    │   ├── history.tsx          ★
+    │   ├── profile.tsx          ★ your account, password, delete account
+    │   ├── dev-login.tsx        ★ developer area login
+    │   ├── dev.tsx              ★ developer area + owner controls
+    │   └── api-test.tsx           (now redirects to the developer area)
     ├── components/
     │   ├── ui.tsx               ★ buttons, inputs, cards, text styles
     │   ├── Logo.tsx             ★
@@ -383,10 +396,12 @@ money-wing/
     │   ├── theme.ts             ★ colours, fonts, sizes
     │   ├── format.ts            ★ $1,234.50 and 274,400 UGX formatting
     │   ├── networks.ts          ★ MTN/Airtel detection, phone formatting
-    │   └── status.ts            ★ status labels and colours
+    │   ├── status.ts            ★ status labels and colours
+    │   └── demo.ts              ★ demo mode switch
     └── services/
         ├── api.ts                 all calls to the server
-        ├── auth-storage.ts      ★ saves the login token
+        ├── admin-api.ts         ★ calls for the developer area
+        ├── auth-storage.ts      ★ saves the customer and developer logins
         └── alert.ts             ★ popups that work on web and phones
 ```
 
@@ -406,6 +421,10 @@ With the app running:
 6. **Confirm:** Continue → Confirm. You see "Transfer created" and "Awaiting payment".
 7. **History:** Dashboard → Transfer history. Your transfer is listed under Today.
 8. **Database:** `npx prisma studio` in `backend/` → the **Transaction** table has your transfer with status `DRAFT`.
+9. **Edit a recipient:** Recipients → Edit. For someone you've sent money to, the number is locked but the name can change.
+10. **Your account:** Dashboard → Your account → change your password, log out, and log in with the new one. Delete a throwaway account to check it's removed.
+11. **Developer area:** go to `localhost:8081/dev-login` and log in with your `DEV_ADMIN_EMAIL` account. Check the Overview numbers, run **API checks**, and watch **Activity** while you use the app in another tab.
+12. **Owner controls:** change the rate in **Owner controls** and check the Send Money screen uses it. Then, in **Transfers**, tap **Manage** on a transfer: Simulate payment → Start sending → Mark delivered. The customer's history shows **Delivered**, and the action appears in **Recent owner actions**.
 
 ---
 
