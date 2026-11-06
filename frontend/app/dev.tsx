@@ -1,19 +1,32 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { AppButton, Badge, Caption, Card, DetailRow, Divider, Loading, Notice, Screen, SectionLabel, Title } from "../components/ui";
+import { AppButton, Badge, Caption, Card, DetailRow, Divider, Loading, Notice, Screen, SectionLabel, TextField, Title } from "../components/ui";
 import { API_BASE_URL } from "./constants/config";
 import { formatCad, formatUgx } from "../constants/format";
 import { formatPhone } from "../constants/networks";
 import { shortReference, STATUS_INFO } from "../constants/status";
 import { colors, fonts, fontSize, radius, spacing } from "../constants/theme";
-import { Activity, AdminTransaction, AdminUser, adminAPI, Overview } from "../services/admin-api";
+import {
+  Activity,
+  AdminTransaction,
+  AdminUser,
+  adminAPI,
+  AuditEntry,
+  Overview,
+  Pricing,
+  PricingInfo,
+  TransferActionName,
+  TransferActionRule,
+} from "../services/admin-api";
+import { confirmAction } from "../services/alert";
 import { getErrorMessage, TransactionStatus } from "../services/api";
 import { clearDevToken } from "../services/auth-storage";
 
-type Tab = "overview" | "checks" | "transfers" | "users" | "activity";
+type Tab = "overview" | "owner" | "checks" | "transfers" | "users" | "activity";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
+  { key: "owner", label: "Owner controls" },
   { key: "checks", label: "API checks" },
   { key: "transfers", label: "Transfers" },
   { key: "users", label: "Users" },
@@ -73,7 +86,7 @@ export default function DevDashboard() {
 
   // Load now, then refresh automatically.
   useEffect(() => {
-    if (tab === "checks") return;
+    if (tab === "checks" || tab === "owner") return; // these manage their own loading
     load();
     const timer = setInterval(load, REFRESH_SECONDS * 1000);
     return () => clearInterval(timer);
@@ -103,7 +116,7 @@ export default function DevDashboard() {
         ))}
       </View>
 
-      {tab !== "checks" && (
+      {tab !== "checks" && tab !== "owner" && (
         <View style={styles.refreshRow}>
           <Caption>
             {updatedAt ? `Updated ${updatedAt.toLocaleTimeString()} · refreshes every ${REFRESH_SECONDS}s` : "Loading..."}
@@ -117,9 +130,10 @@ export default function DevDashboard() {
       {error && <Notice tone="danger">{error}</Notice>}
 
       {tab === "overview" && (overview ? <OverviewTab data={overview} /> : <Loading />)}
+      {tab === "owner" && <OwnerTab />}
       {tab === "checks" && <ChecksTab />}
       {tab === "transfers" && (
-        <TransfersTab data={transfers} filter={statusFilter} onFilter={setStatusFilter} />
+        <TransfersTab data={transfers} filter={statusFilter} onFilter={setStatusFilter} onChanged={load} />
       )}
       {tab === "users" && (users ? <UsersTab data={users} /> : <Loading />)}
       {tab === "activity" && (activity ? <ActivityTab data={activity} /> : <Loading />)}
@@ -259,12 +273,21 @@ function TransfersTab({
   data,
   filter,
   onFilter,
+  onChanged,
 }: {
   data: AdminTransaction[] | null;
   filter?: TransactionStatus;
   onFilter: (s?: TransactionStatus) => void;
+  onChanged: () => void;
 }) {
   const statuses = Object.keys(STATUS_INFO) as TransactionStatus[];
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [rules, setRules] = useState<TransferActionRule[]>([]);
+
+  useEffect(() => {
+    adminAPI.transferActions().then(setRules).catch(() => setRules([]));
+  }, []);
+
   return (
     <>
       <View style={styles.filters}>
@@ -280,26 +303,156 @@ function TransfersTab({
       ) : (
         <Card>
           {data.map((t, i) => (
-            <View key={t.id} style={[styles.listRow, i > 0 && styles.rowBorder]}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.rowTitle}>
-                  {formatCad(t.cadAmount)} → {formatUgx(t.ugxAmount)}
-                </Text>
-                <Text style={styles.rowSub} numberOfLines={1}>
-                  {t.user.email} → {t.recipient.name} ({formatPhone(t.recipient.phoneNumber)}, {t.recipient.network})
-                </Text>
-                <Text style={styles.rowSub}>
-                  {shortReference(t.id)} · {timeAgo(t.createdAt)}
-                  {t.stripePaymentId ? " · Stripe ✓" : ""}
-                </Text>
-              </View>
-              <Badge label={STATUS_INFO[t.status].label} color={STATUS_INFO[t.status].color} background={STATUS_INFO[t.status].background} />
+            <View key={t.id} style={i > 0 && styles.rowBorder}>
+              <Pressable
+                onPress={() => setOpenId(openId === t.id ? null : t.id)}
+                style={({ pressed }) => [styles.listRow, pressed && { opacity: 0.6 }]}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: openId === t.id }}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.rowTitle}>
+                    {formatCad(t.cadAmount)} → {formatUgx(t.ugxAmount)}
+                  </Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>
+                    {t.user.email} → {t.recipient.name} ({formatPhone(t.recipient.phoneNumber)}, {t.recipient.network})
+                  </Text>
+                  <Text style={styles.rowSub}>
+                    {shortReference(t.id)} · {timeAgo(t.createdAt)}
+                    {t.stripePaymentId ? " · Stripe ✓" : ""}
+                    {t.providerPayoutRef ? ` · Ref ${t.providerPayoutRef}` : ""}
+                  </Text>
+                </View>
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
+                  <Badge label={STATUS_INFO[t.status].label} color={STATUS_INFO[t.status].color} background={STATUS_INFO[t.status].background} />
+                  <Text style={styles.manage}>{openId === t.id ? "Close ▲" : "Manage ▼"}</Text>
+                </View>
+              </Pressable>
+              {openId === t.id && (
+                <TransferPanel
+                  transfer={t}
+                  rules={rules.filter((r) => r.from.includes(t.status))}
+                  onChanged={onChanged}
+                />
+              )}
             </View>
           ))}
         </Card>
       )}
-      <Caption center>Showing the latest 20.</Caption>
+      <Caption center>Showing the latest 20. Tap a transfer to manage it.</Caption>
     </>
+  );
+}
+
+const ACTION_LABELS: Record<TransferActionName, { title: string; variant: "primary" | "secondary" | "ghost" | "danger"; help: string }> = {
+  start_payout: { title: "Start sending", variant: "primary", help: "You're sending the mobile money now." },
+  mark_delivered: { title: "Mark delivered", variant: "primary", help: "The money arrived. Enter the MTN/Airtel transaction reference." },
+  retry_payout: { title: "Retry sending", variant: "secondary", help: "Try sending again." },
+  mark_failed: { title: "Mark failed", variant: "danger", help: "Sending didn't work. Enter the reason." },
+  cancel: { title: "Cancel transfer", variant: "danger", help: "Stops a transfer that hasn't been paid for." },
+  simulate_payment: { title: "Simulate payment (testing only)", variant: "ghost", help: "Pretends the card payment went through, so you can test payouts before Stripe is connected." },
+};
+
+// Actions and history for one transfer.
+function TransferPanel({ transfer, rules, onChanged }: { transfer: AdminTransaction; rules: TransferActionRule[]; onChanged: () => void }) {
+  const [reference, setReference] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState<TransferActionName | null>(null);
+  const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [history, setHistory] = useState<AuditEntry[] | null>(null);
+
+  const loadHistory = useCallback(() => {
+    adminAPI.audit(transfer.id).then(setHistory).catch(() => setHistory([]));
+  }, [transfer.id]);
+  useEffect(loadHistory, [loadHistory]);
+
+  const needsReference = rules.some((r) => r.needs === "reference");
+  const needsNote = rules.some((r) => r.needs === "note");
+
+  const run = async (rule: TransferActionRule) => {
+    const label = ACTION_LABELS[rule.action];
+    if (rule.needs === "reference" && !reference.trim()) {
+      setMessage({ tone: "danger", text: "Enter the mobile money reference first." });
+      return;
+    }
+    if (rule.needs === "note" && !note.trim()) {
+      setMessage({ tone: "danger", text: "Enter a reason first." });
+      return;
+    }
+    const ok = await confirmAction(
+      label.title,
+      `${shortReference(transfer.id)}: ${formatUgx(transfer.ugxAmount)} to ${transfer.recipient.name}.\n\nStatus will change to "${STATUS_INFO[rule.to].label}".`,
+      "Confirm"
+    );
+    if (!ok) return;
+
+    setBusy(rule.action);
+    setMessage(null);
+    try {
+      await adminAPI.doTransferAction(transfer.id, rule.action, {
+        ...(rule.needs === "reference" && { reference }),
+        ...(rule.needs === "note" && { note }),
+      });
+      setMessage({ tone: "success", text: `Done: now "${STATUS_INFO[rule.to].label}".` });
+      setReference("");
+      setNote("");
+      loadHistory();
+      onChanged();
+    } catch (e: any) {
+      setMessage({ tone: "danger", text: getErrorMessage(e, "Could not update the transfer") });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <View style={styles.panel}>
+      {message && <Notice tone={message.tone}>{message.text}</Notice>}
+
+      {rules.length === 0 ? (
+        <Caption>
+          {transfer.status === "DRAFT" || transfer.status === "PAYMENT_PENDING"
+            ? "Waiting for the customer to pay."
+            : "No actions available for this status."}
+        </Caption>
+      ) : (
+        <>
+          {needsReference && (
+            <TextField
+              label="Mobile money reference (for Mark delivered)"
+              placeholder="e.g. MP261105.1234.A56789"
+              value={reference}
+              onChangeText={setReference}
+              autoCapitalize="characters"
+            />
+          )}
+          {needsNote && (
+            <TextField label="Reason (for Mark failed)" placeholder="e.g. Number not registered for mobile money" value={note} onChangeText={setNote} />
+          )}
+          {rules.map((rule) => (
+            <View key={rule.action} style={{ marginBottom: spacing.sm }}>
+              <AppButton
+                title={ACTION_LABELS[rule.action].title}
+                variant={ACTION_LABELS[rule.action].variant}
+                onPress={() => run(rule)}
+                loading={busy === rule.action}
+                disabled={busy !== null && busy !== rule.action}
+              />
+              <Caption style={{ marginTop: 4 }}>{ACTION_LABELS[rule.action].help}</Caption>
+            </View>
+          ))}
+        </>
+      )}
+
+      <Text style={[styles.rowTitle, { marginTop: spacing.md }]}>History</Text>
+      {!history ? (
+        <ActivityIndicator color={colors.secondary} />
+      ) : history.length === 0 ? (
+        <Caption>No owner actions yet.</Caption>
+      ) : (
+        history.map((e) => <AuditRow key={e.id} entry={e} />)
+      )}
+    </View>
   );
 }
 
@@ -308,6 +461,153 @@ function FilterChip({ label, active, onPress }: { label: string; active: boolean
     <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
+  );
+}
+
+// ---------- Owner controls ----------
+
+const PRICING_FIELDS: { key: keyof Pricing; label: string; hint: string; prefix?: string; suffix?: string }[] = [
+  { key: "exchangeRate", label: "Exchange rate", hint: "How many Ugandan shillings 1 Canadian dollar buys", prefix: "1 CAD =", suffix: "UGX" },
+  { key: "feePercent", label: "Fee", hint: "Taken out of the amount the customer sends (0–20)", suffix: "%" },
+  { key: "minCad", label: "Minimum transfer", hint: "Smallest amount a customer can send", prefix: "$", suffix: "CAD" },
+  { key: "maxCad", label: "Maximum transfer", hint: "Largest amount a customer can send", prefix: "$", suffix: "CAD" },
+];
+
+function OwnerTab() {
+  const [info, setInfo] = useState<PricingInfo | null>(null);
+  const [form, setForm] = useState<Record<keyof Pricing, string> | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [log, setLog] = useState<AuditEntry[] | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [settings, entries] = await Promise.all([adminAPI.settings(), adminAPI.audit()]);
+      setInfo(settings);
+      setForm({
+        exchangeRate: String(settings.pricing.exchangeRate),
+        feePercent: String(settings.pricing.feePercent),
+        minCad: String(settings.pricing.minCad),
+        maxCad: String(settings.pricing.maxCad),
+      });
+      setLog(entries);
+    } catch (e: any) {
+      setMessage({ tone: "danger", text: getErrorMessage(e, "Could not load settings") });
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (!info || !form) return message ? <Notice tone={message.tone}>{message.text}</Notice> : <Loading />;
+
+  const values = {
+    exchangeRate: Number(form.exchangeRate),
+    feePercent: Number(form.feePercent),
+    minCad: Number(form.minCad),
+    maxCad: Number(form.maxCad),
+  };
+  const valid = Object.values(values).every((v) => Number.isFinite(v) && v >= 0) && Object.values(form).every((v) => v.trim() !== "");
+  const changed = (Object.keys(values) as (keyof Pricing)[]).some((k) => values[k] !== info.pricing[k]);
+
+  // What a $100 transfer would look like with the numbers in the form.
+  const previewFee = valid ? Math.round(100 * values.feePercent) / 100 : 0;
+  const previewUgx = valid ? Math.floor((100 - previewFee) * values.exchangeRate) : 0;
+
+  const save = async () => {
+    const lines = (Object.keys(values) as (keyof Pricing)[])
+      .filter((k) => values[k] !== info.pricing[k])
+      .map((k) => `${PRICING_FIELDS.find((f) => f.key === k)!.label}: ${info.pricing[k]} → ${values[k]}`)
+      .join("\n");
+    const ok = await confirmAction("Save new pricing?", `${lines}\n\nNew quotes will use these numbers straight away.`, "Save");
+    if (!ok) return;
+
+    setSaving(true);
+    setMessage(null);
+    try {
+      await adminAPI.savePricing(values);
+      setMessage({ tone: "success", text: "Saved. New quotes now use these numbers." });
+      await load();
+    } catch (e: any) {
+      setMessage({ tone: "danger", text: getErrorMessage(e, "Could not save") });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <SectionLabel>Rate, fee and limits</SectionLabel>
+      <Card>
+        <Caption style={{ marginBottom: spacing.md }}>
+          {info.source === "owner"
+            ? `Last changed by ${info.updatedBy} on ${new Date(info.updatedAt!).toLocaleString()}.`
+            : "Not set yet: using the defaults from backend/.env."}
+        </Caption>
+
+        {message && <Notice tone={message.tone}>{message.text}</Notice>}
+
+        {PRICING_FIELDS.map((f) => (
+          <TextField
+            key={f.key}
+            label={`${f.label}${f.suffix ? ` (${f.suffix})` : ""}`}
+            hint={f.hint}
+            value={form[f.key]}
+            onChangeText={(text) => setForm({ ...form, [f.key]: text.replace(/[^0-9.]/g, "") })}
+            keyboardType="decimal-pad"
+          />
+        ))}
+
+        <View style={styles.preview}>
+          <Text style={styles.previewLabel}>Preview: customer sends $100.00</Text>
+          <Text style={styles.previewValue}>
+            {valid ? `Fee ${formatCad(previewFee)} · recipient gets ${formatUgx(previewUgx)}` : "Fill in all fields"}
+          </Text>
+        </View>
+
+        <AppButton title="Save pricing" onPress={save} loading={saving} disabled={!valid || !changed} />
+        {!changed && <Caption center style={{ marginTop: spacing.sm }}>No changes yet.</Caption>}
+      </Card>
+
+      <SectionLabel>Recent owner actions</SectionLabel>
+      <Card>
+        {!log ? <Loading /> : log.length === 0 ? <Caption>Nothing yet.</Caption> : log.map((e) => <AuditRow key={e.id} entry={e} />)}
+      </Card>
+      <Caption center>Every change is recorded permanently with who made it.</Caption>
+    </>
+  );
+}
+
+// One line of the owner action log, in plain words.
+function describeAudit(e: AuditEntry): string {
+  const d = e.details ?? {};
+  if (e.action === "pricing.update") {
+    const keys: (keyof Pricing)[] = ["exchangeRate", "feePercent", "minCad", "maxCad"];
+    const names = { exchangeRate: "rate", feePercent: "fee %", minCad: "min $", maxCad: "max $" };
+    const parts = keys.filter((k) => d.before?.[k] !== d.after?.[k]).map((k) => `${names[k]} ${d.before?.[k]} → ${d.after?.[k]}`);
+    return `Changed pricing: ${parts.join(", ") || "no change"}`;
+  }
+  const ref = e.targetId ? shortReference(e.targetId) : "";
+  const to = d.to && STATUS_INFO[d.to as TransactionStatus] ? STATUS_INFO[d.to as TransactionStatus].label : d.to;
+  const verb: Record<string, string> = {
+    "transfer.simulate_payment": "Simulated payment for",
+    "transfer.start_payout": "Started sending",
+    "transfer.mark_delivered": "Marked delivered",
+    "transfer.mark_failed": "Marked failed",
+    "transfer.retry_payout": "Retried sending",
+    "transfer.cancel": "Cancelled",
+  };
+  return `${verb[e.action] ?? e.action} ${ref} → ${to}${d.reference ? ` (ref ${d.reference})` : ""}${d.note ? `: ${d.note}` : ""}`;
+}
+
+function AuditRow({ entry }: { entry: AuditEntry }) {
+  return (
+    <View style={styles.auditRow}>
+      <Text style={styles.auditText}>{describeAudit(entry)}</Text>
+      <Text style={styles.rowSub}>
+        {entry.actorEmail} · {new Date(entry.createdAt).toLocaleString()}
+      </Text>
+    </View>
   );
 }
 
@@ -424,4 +724,11 @@ const styles = StyleSheet.create({
   code: { fontFamily: fonts.bold, fontSize: fontSize.sm, width: 32 },
   method: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textSecondary, width: 52 },
   path: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.text, flex: 1, minWidth: 0 },
+  manage: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.secondary },
+  panel: { backgroundColor: colors.background, borderRadius: radius.row, padding: spacing.lg, marginBottom: spacing.md },
+  preview: { backgroundColor: colors.primarySoft, borderRadius: radius.row, padding: spacing.md, marginBottom: spacing.lg },
+  previewLabel: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.primary },
+  previewValue: { fontFamily: fonts.bold, fontSize: fontSize.base, color: colors.text, marginTop: 2 },
+  auditRow: { paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  auditText: { fontFamily: fonts.regular, fontSize: fontSize.base, color: colors.text },
 });

@@ -33,7 +33,7 @@ const stripeService = new StripeService();
 // Endpoint-> "Get a quote for sending money"
 router.get('/quote', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
-        res.status(200).json(calculateQuote(req.query.cadAmount));
+        res.status(200).json(await calculateQuote(req.query.cadAmount));
     } catch (error: any) {
         if (error instanceof QuoteError) {
             return res.status(400).json({ error: error.message });
@@ -188,7 +188,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         // Same calculation as GET /quote (also validates the amount)
         let quote;
         try {
-            quote = calculateQuote(cadAmount);
+            quote = await calculateQuote(cadAmount);
         } catch (error: any) {
             if (error instanceof QuoteError) {
                 return res.status(400).json({ error: error.message });

@@ -9,6 +9,7 @@ export const STATUS_INFO: Record<TransactionStatus, { label: string; color: stri
   COMPLETED: { label: 'Delivered', color: '#166534', background: '#DCFCE7' },
   PAYOUT_FAILED: { label: 'Delivery failed', color: '#B91C1C', background: '#FEE2E2' },
   FAILED: { label: 'Failed', color: '#B91C1C', background: '#FEE2E2' },
+  CANCELLED: { label: 'Cancelled', color: '#4B5563', background: '#E5E7EB' },
 };
 
 // A short reference customers can quote, from the transfer's id.

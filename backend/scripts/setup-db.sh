@@ -1,5 +1,8 @@
 #!/bin/bash
-# One-time local database setup for MoneyWing.
+# Gets the local database ready. Safe to run any time:
+#   - creates the 'moneywing' database if it doesn't exist yet
+#   - applies any new table changes (prisma/migrations) that teammates added
+#   - refreshes Prisma's generated code to match
 # Run from anywhere:  bash ~/Desktop/money-wing/backend/scripts/setup-db.sh
 set -e
 
@@ -14,12 +17,10 @@ fi
 
 if createdb moneywing 2>/dev/null; then
   echo "✅ Created database 'moneywing'"
-else
-  echo "ℹ️  Database 'moneywing' already exists, reusing it"
 fi
 
-echo "Creating tables..."
-npx prisma migrate dev --name init
+echo "▶ Applying database changes ..."
+npx prisma migrate deploy
+npx prisma generate >/dev/null
 
-echo ""
-echo "✅ Database ready. Start the server with:  npm run dev"
+echo "✅ Database ready."

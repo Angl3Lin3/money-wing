@@ -27,6 +27,7 @@ export async function requireAdmin(req: AuthRequest, res: Response, next: NextFu
         if (!user || !adminEmails().includes(user.email.toLowerCase())) {
             return res.status(403).json({ error: 'This account is not allowed into the developer area.' });
         }
+        req.adminEmail = user.email.toLowerCase(); // recorded on owner actions
         next();
     } catch (error) {
         console.error('Admin check error:', error);

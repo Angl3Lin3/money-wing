@@ -156,7 +156,8 @@ export type TransactionStatus =
   | 'PAYOUT_PENDING'
   | 'COMPLETED'
   | 'PAYOUT_FAILED'
-  | 'FAILED';
+  | 'FAILED'
+  | 'CANCELLED';
 
 export interface Transaction {
   id: string;

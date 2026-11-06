@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 
 export interface AuthRequest extends Request {
     userId?: string;
+    adminEmail?: string; // set by requireAdmin for developer-area requests
 }
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {

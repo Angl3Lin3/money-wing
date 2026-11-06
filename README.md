@@ -53,7 +53,7 @@ The original project ran its server on Heroku. **That Heroku server has been del
    - `DATABASE_URL`: with Postgres.app this is `postgresql://YOUR_MAC_USERNAME@localhost:5432/moneywing`
    - `JWT_SECRET`: any long random text (run `openssl rand -hex 32` to make one)
 
-2. Create the database and tables:
+2. Create the database and tables (also applies any new database changes; safe to run any time):
    ```bash
    bash backend/scripts/setup-db.sh
    ```
@@ -63,7 +63,7 @@ The original project ran its server on Heroku. **That Heroku server has been del
 Double-click **`start-dev.command`** in the main folder. It:
 
 1. installs packages if anything changed,
-2. sets up the database the first time,
+2. creates the database if needed and applies any new database changes,
 3. starts the server on `http://localhost:3000`,
 4. starts the app and opens it in your browser.
 
@@ -172,6 +172,7 @@ Screens: **Review Transfer** and **Transfer**.
   | `COMPLETED` | Delivered |
   | `PAYOUT_FAILED` | Delivery failed |
   | `FAILED` | Failed |
+  | `CANCELLED` | Cancelled |
 
 ### 6. Transfer history
 
@@ -222,7 +223,39 @@ Anyone not listed is refused, even with a valid customer account. If `ADMIN_EMAI
 
 The activity log is kept in memory and clears when the server restarts. It never stores request contents, passwords or tokens, and ids in paths are hidden.
 
-**New endpoints** (all require a developer login): `GET /admin/overview`, `GET /admin/users`, `GET /admin/transactions?status=`, `GET /admin/activity`.
+### 9. Owner controls
+
+In the developer area, so Alex can run the business day to day.
+
+**Rate, fee and limits** (*Owner controls* tab)
+- Change the exchange rate, fee and minimum/maximum transfer from a form, with a live preview of what a $100 transfer gives.
+- Saved in the database and used by new quotes straight away. The values in `.env` are only the starting defaults until something is saved here.
+- Customers already on the review screen are protected by the price lock: if the rate changes, they're shown the new amounts before anything is saved.
+
+**Manual payouts** (*Transfers* tab → tap **Manage** on a transfer)
+
+Until Flutterwave is connected, Alex can send the mobile money himself and record it:
+
+| Button | From status | To status | Needs |
+| --- | --- | --- | --- |
+| Start sending | Paid | Sending to Uganda | |
+| Mark delivered | Paid / Sending / Delivery failed | Delivered | The MTN/Airtel transaction reference |
+| Mark failed | Sending to Uganda | Delivery failed | A reason |
+| Retry sending | Delivery failed | Sending to Uganda | |
+| Cancel transfer | Awaiting payment / Payment processing | Cancelled | |
+| Simulate payment *(testing only)* | Awaiting payment / Payment processing | Paid | |
+
+- **Simulate payment** lets you test the payout buttons before Stripe is connected. It's switched off when `NODE_ENV=production`.
+- Refunding a paid transfer will come with the Stripe step.
+- If two people click at the same time, only the first action goes through.
+
+**Action log**
+
+Every owner action (pricing changes and transfer updates) is saved permanently with who did it and when. It appears under *Recent owner actions* and in each transfer's *History*.
+
+**Database changes:** new `Setting` and `AuditLog` tables and a `CANCELLED` status (`prisma/migrations/20261105230000_owner_controls`). `start-dev.command` applies new database changes automatically every time it starts. Without it, run `bash backend/scripts/setup-db.sh`.
+
+**New endpoints** (all require a developer login): `GET /admin/overview`, `GET /admin/users`, `GET /admin/transactions?status=`, `GET /admin/activity`, `GET /admin/settings`, `PUT /admin/settings/pricing`, `GET /admin/transfer-actions`, `POST /admin/transactions/:id/action`, `GET /admin/audit?targetId=`.
 
 ---
 
@@ -360,6 +393,5 @@ With the app running:
 - **Forgot password.**
 - **Real payouts** (Flutterwave). Payouts are simulated.
 - **Identity verification (KYC)** before sending. Currently mocked and not enforced.
-- **Admin screen** for the owner: set the rate, see all transfers, mark manual payouts.
 - **Online hosting** (Heroku or similar) so others can use it without running it locally.
 - Legal and compliance work (FINTRAC registration, etc.) is the business owner's responsibility before real money can move.

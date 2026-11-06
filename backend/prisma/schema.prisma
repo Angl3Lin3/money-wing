@@ -68,4 +68,25 @@ enum TransactionStatus {
   COMPLETED
   PAYOUT_FAILED
   FAILED
+  CANCELLED
+}
+
+// Settings the owner changes from the developer area (e.g. key "pricing").
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+// A permanent record of every owner action (rate changes, payouts, cancels).
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  targetId   String?
+  details    Json?
+  actorEmail String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
 }

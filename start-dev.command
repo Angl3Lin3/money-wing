@@ -20,10 +20,8 @@ for dir in backend frontend; do
   fi
 done
 
-# First run only: create the database and tables.
-if [ ! -d backend/prisma/migrations ]; then
-  bash backend/scripts/setup-db.sh || { read -n 1 -s -r -p "Setup failed. Press any key to close..."; exit 1; }
-fi
+# Create the database if needed and apply any new table changes.
+bash backend/scripts/setup-db.sh || { read -n 1 -s -r -p "Database setup failed. Press any key to close..."; exit 1; }
 
 echo "▶ Starting backend on http://localhost:3000 ..."
 (cd backend && npm run dev) &

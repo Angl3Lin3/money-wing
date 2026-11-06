@@ -54,6 +54,7 @@ export interface AdminTransaction {
   status: TransactionStatus;
   provider: string | null;
   stripePaymentId: string | null;
+  providerPayoutRef: string | null;
   createdAt: string;
   updatedAt: string;
   user: { email: string };
@@ -67,7 +68,55 @@ export interface Activity {
   summary: { requestsLastHour: number; serverErrorsLastHour: number; averageMsLastHour: number };
 }
 
+export interface Pricing {
+  exchangeRate: number;
+  feePercent: number;
+  minCad: number;
+  maxCad: number;
+}
+
+export interface PricingInfo {
+  pricing: Pricing;
+  source: 'owner' | 'default';
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export type TransferActionName =
+  | 'simulate_payment'
+  | 'start_payout'
+  | 'mark_delivered'
+  | 'mark_failed'
+  | 'retry_payout'
+  | 'cancel';
+
+export interface TransferActionRule {
+  action: TransferActionName;
+  from: TransactionStatus[];
+  to: TransactionStatus;
+  needs: 'reference' | 'note' | null;
+}
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  targetId: string | null;
+  details: Record<string, any> | null;
+  actorEmail: string;
+  createdAt: string;
+}
+
 export const adminAPI = {
+  // Owner controls
+  settings: async (): Promise<PricingInfo> => (await adminApi.get('/admin/settings')).data,
+  savePricing: async (pricing: Pricing): Promise<PricingInfo> =>
+    (await adminApi.put('/admin/settings/pricing', pricing)).data,
+  transferActions: async (): Promise<TransferActionRule[]> => (await adminApi.get('/admin/transfer-actions')).data,
+  doTransferAction: async (id: string, action: TransferActionName, extra: { note?: string; reference?: string } = {}) =>
+    (await adminApi.post(`/admin/transactions/${id}/action`, { action, ...extra })).data as { id: string; status: TransactionStatus },
+  audit: async (targetId?: string): Promise<AuditEntry[]> =>
+    (await adminApi.get('/admin/audit', { params: targetId ? { targetId } : {} })).data.entries,
+
   overview: async (): Promise<Overview> => (await adminApi.get('/admin/overview')).data,
   users: async (): Promise<AdminUser[]> => (await adminApi.get('/admin/users')).data.users,
   transactions: async (status?: TransactionStatus): Promise<AdminTransaction[]> =>
