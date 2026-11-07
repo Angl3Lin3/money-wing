@@ -1,5 +1,8 @@
 
 import express, { Request, Response } from 'express';
+import { recordStatusChange } from '../services/status-history.service';
+import { sendEmailInBackground } from '../services/email.service';
+import { transferDeliveredEmail, transferFailedEmail } from '../services/email.templates';
 import { PrismaClient, Transaction } from '@prisma/client';
 import { stripe } from '../services/stripe.service'; // Import your existing Stripe instance
 import { payoutManager } from '../services/payout.manager';
@@ -116,6 +119,7 @@ async function handlePaymentIntentSucceeded(event: any) {
             where: { id: transaction.id },
             data: { status: 'FUNDED'}
         });
+        await recordStatusChange(transaction.id, 'PAYMENT_PENDING', 'FUNDED', 'system', 'transfer.payment_received', { source: 'stripe' }, tx);
         console.log(`Transaction ${transaction.id} status updated to FUNDED.`);
 
         return transaction;
@@ -137,6 +141,7 @@ async function initiateAutomaticPayout(transaction: any) {
             where: { id: transaction.id },
             data: { status: 'PAYOUT_PENDING'}
         });
+        await recordStatusChange(transaction.id, 'FUNDED', 'PAYOUT_PENDING', 'system', 'transfer.payout_started', { source: 'payout' });
 
         // Get the active payout provider from the manager 
         const payoutProvider = payoutManager.getProvider();
@@ -153,6 +158,12 @@ async function initiateAutomaticPayout(transaction: any) {
                 providerPayoutRef: result.providerReference
             } 
         });
+        await recordStatusChange(
+            transaction.id, 'PAYOUT_PENDING', result.success ? 'COMPLETED' : 'PAYOUT_FAILED', 'system',
+            result.success ? 'transfer.payout_completed' : 'transfer.payout_failed',
+            { source: 'payout', ...(result.providerReference && { reference: result.providerReference }) }
+        );
+        notifyCustomer(transaction.id, result.success ? 'delivered' : 'failed', result.providerReference);
         console.log(`Payout for transaction ${transaction.id} finished with status: ${result.success ? 'COMPLETED' : 'PAYOUT_FAILED'}`)
     } catch(error: any) {
         console.error(`Criticaal error during payout for tx ${transaction.id}:`, error);
@@ -160,6 +171,8 @@ async function initiateAutomaticPayout(transaction: any) {
             where: { id: transaction.id},
             data: {status: `PAYOUT_FAILED`}
         })
+        await recordStatusChange(transaction.id, 'PAYOUT_PENDING', 'PAYOUT_FAILED', 'system', 'transfer.payout_failed', { source: 'payout' }).catch(() => {});
+        notifyCustomer(transaction.id, 'failed');
     }
 }
 
@@ -170,6 +183,10 @@ async function handlePaymentIntentFailed(event: any) {
        console.error(`Payment Intent ${paymentIntent.id} failed`);
 
        // Update transaction status to indicate failure 
+       const affected = await prisma.transaction.findMany({
+        where: { stripePaymentId: paymentIntent.id },
+        select: { id: true, status: true }
+       });
        await prisma.transaction.updateMany({
         where: {
             stripePaymentId: paymentIntent.id
@@ -178,6 +195,9 @@ async function handlePaymentIntentFailed(event: any) {
             status: 'FAILED' // Use the enum value
         }
        });
+       for (const t of affected) {
+        await recordStatusChange(t.id, t.status, 'FAILED', 'system', 'transfer.payment_failed', { source: 'stripe' });
+       }
     } catch(error) {
         console.error('Error handling payment_intent.payment_failed:', error);
         throw error;
@@ -186,6 +206,20 @@ async function handlePaymentIntentFailed(event: any) {
 
 
 
+
+// Email the customer about an automatic payout's outcome (never blocks).
+async function notifyCustomer(transactionId: string, outcome: 'delivered' | 'failed', reference?: string | null) {
+    try {
+        const t = await prisma.transaction.findUnique({
+            where: { id: transactionId },
+            include: { user: { select: { email: true } }, recipient: { select: { name: true, phoneNumber: true, network: true } } }
+        });
+        if (!t) return;
+        sendEmailInBackground(outcome === 'delivered' ? transferDeliveredEmail(t.user.email, t, reference) : transferFailedEmail(t.user.email, t));
+    } catch (error) {
+        console.error('Could not email the customer about their payout:', error);
+    }
+}
 
 export default router;
 

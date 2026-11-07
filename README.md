@@ -4,7 +4,7 @@ A mobile app for sending money from **Canada (CAD)** to **Uganda (UGX)**. Custom
 
 This is a fork of the original MoneyWing project. This README explains how to run the app and **everything that has been added since the original version**.
 
-> **Status:** working demo. Customers can sign up, reset a forgotten password, manage recipients, get a quote, create transfers, get email updates and manage their account. The owner can set the rate and fee and record payouts by hand in the developer area. **Card payment and automatic payouts are not connected yet**, so no real money moves, and the app shows a "Demo version" banner on every screen.
+> **Status:** working demo. Customers can sign up, reset a forgotten password, manage recipients, get a quote, create, track, repeat and cancel transfers, get email updates and manage their account. The owner can set the rate and fee and record payouts by hand in the developer area. **Card payment and automatic payouts are not connected yet**, so no real money moves, and the app shows a "Demo version" banner on every screen.
 
 ---
 
@@ -306,6 +306,28 @@ Each email has the MoneyWing header and a plain-text version. The wording is all
 
 **Code guessing protection:** signup and reset codes stop working after **5 wrong tries** ("Too many wrong tries. Please request a new code."), so a 6-digit code can't be guessed.
 
+### 12. Progress tracker, Send again, Cancel
+
+All on a transfer's screen (Transfer history → tap a transfer).
+
+**Progress tracker**
+- Shows the steps **Transfer created → Payment received → Sending to Uganda → Delivered**, with the time of each, and which one it's on now.
+- Shows **Delivery problem** (with the reason the owner entered), **Payment failed** or **Cancelled** when that happens. If a failed delivery is retried and succeeds, it ends at Delivered.
+- Refreshes by itself every 15 seconds until the transfer is finished.
+- Built from the action log: every status change is now recorded with its time, whether it's the owner's buttons, the customer cancelling, or (once connected) Stripe and automatic payouts. Customers never see who on the team made a change.
+
+**Send again**
+- Opens Send Money with the same recipient and amount filled in, at **today's** rate.
+
+**Cancel transfer**
+- Customers can cancel their own transfer **before paying**: status *Awaiting payment*, or *Payment processing* if no card payment has actually started.
+- Once a card payment has started, or the transfer is paid, the button disappears, so nobody can be charged for a cancelled transfer.
+- The customer gets a "Transfer cancelled" email, and the cancellation appears in the developer area's action log.
+
+**Also:** automatic payouts (when connected) now email the customer "Money delivered" / "Problem with your transfer", the same as the owner's manual buttons. Payment wording no longer mentions cards ("Payment options are coming soon"), since the payment method is still to be decided.
+
+**New endpoint:** `POST /transaction/:id/cancel`. `GET /transaction/:id` now also returns `timeline`, `canCancel` and `recipientId`.
+
 ---
 
 ## API reference
@@ -331,7 +353,8 @@ All endpoints except signup, login and the health check need the header `Authori
 | GET | `/transaction/quote?cadAmount=100` | Fee, rate and UGX for an amount | Changed |
 | POST | `/transaction` | Create a transfer (`DRAFT`). Send `expectedUgxAmount` and `expectedFee` for the price lock (returns `409` if they changed) | Changed |
 | GET | `/transaction` | List your transfers, newest first. Optional `?limit=20&before=<date>` | **New** |
-| GET | `/transaction/:id` | One of your transfers | **New** |
+| GET | `/transaction/:id` | One of your transfers, with its progress timeline and whether it can be cancelled | **New** |
+| POST | `/transaction/:id/cancel` | Cancel your own transfer before paying | **New** |
 | POST | `/transaction/:id/payment-intent` | Start a Stripe card payment | Not used by the app yet |
 | POST | `/webhooks/stripe` | Stripe tells the server a payment succeeded or failed | Not used yet |
 
@@ -403,6 +426,7 @@ money-wing/
 │       │   ├── dev-admin.service.ts ★ local developer account from .env
 │       │   ├── email.service.ts   ★ sends emails (or keeps them for the Emails tab)
 │       │   ├── email.templates.ts ★ the wording of every email
+│       │   ├── status-history.service.ts ★ records status changes, builds the progress timeline
 │       │   ├── stripe.service.ts
 │       │   └── payout.manager.ts  (mock payouts)
 │       └── utils/phone.ts       ★ Uganda phone number checks
@@ -426,6 +450,7 @@ money-wing/
     │   └── api-test.tsx           (now redirects to the developer area)
     ├── components/
     │   ├── ui.tsx               ★ buttons, inputs, cards, text styles
+    │   ├── ProgressTracker.tsx  ★ step-by-step transfer progress
     │   ├── Logo.tsx             ★
     │   ├── HeaderNav.tsx        ★ Back and Home buttons
     │   ├── PasswordInput.tsx    ★ Show / Hide
@@ -465,6 +490,8 @@ With the app running:
 12. **Owner controls:** change the rate in **Owner controls** and check the Send Money screen uses it. Then, in **Transfers**, tap **Manage** on a transfer: Simulate payment → Start sending → Mark delivered. The customer's history shows **Delivered**, and the action appears in **Recent owner actions**.
 13. **Forgot password:** Log in → Forgot password? → enter your email → read the code in the developer area's **Emails** tab → set a new password and log in with it.
 14. **Emails:** make a transfer and mark it delivered in Owner controls, then check the **Emails** tab for the receipt and the "Money delivered" email.
+15. **Progress tracker:** open a transfer, then in another tab use Owner controls to Simulate payment → Start sending → Mark delivered. The tracker moves along by itself within 15 seconds.
+16. **Send again / Cancel:** on an unpaid transfer, tap **Cancel transfer** (it turns to Cancelled and an email appears in the Emails tab). On any transfer, **Send again** opens Send Money already filled in.
 
 ---
 

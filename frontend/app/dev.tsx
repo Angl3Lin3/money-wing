@@ -600,6 +600,13 @@ function describeAudit(e: AuditEntry): string {
     "transfer.mark_failed": "Marked failed",
     "transfer.retry_payout": "Retried sending",
     "transfer.cancel": "Cancelled",
+    "transfer.customer_cancel": "Customer cancelled",
+    "transfer.payment_started": "Card payment started for",
+    "transfer.payment_received": "Payment received for",
+    "transfer.payment_failed": "Payment failed for",
+    "transfer.payout_started": "Automatic payout started for",
+    "transfer.payout_completed": "Automatic payout delivered",
+    "transfer.payout_failed": "Automatic payout failed for",
   };
   return `${verb[e.action] ?? e.action} ${ref} → ${to}${d.reference ? ` (ref ${d.reference})` : ""}${d.note ? `: ${d.note}` : ""}`;
 }

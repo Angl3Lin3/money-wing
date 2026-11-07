@@ -5,7 +5,8 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { normalizeUgandaPhone, networkForPhone, VALID_NETWORKS } from '../utils/phone';
 import { calculateQuote, QuoteError } from '../services/pricing.service';
 import { sendEmailInBackground } from '../services/email.service';
-import { transferCreatedEmail } from '../services/email.templates';
+import { transferCancelledEmail, transferCreatedEmail } from '../services/email.templates';
+import { getTimeline, recordStatusChange } from '../services/status-history.service';
 
 
 
@@ -17,6 +18,7 @@ type TransactionWithRecipient = Prisma.TransactionGetPayload<{
 function serializeTransaction(transaction: TransactionWithRecipient) {
     return {
         id: transaction.id,
+        recipientId: transaction.recipientId,
         cadAmount: transaction.cadAmount,
         fee: transaction.fee,
         exchangeRate: transaction.exchangeRate,
@@ -399,6 +401,7 @@ router.post('/:id/payment-intent', authenticateToken, async( req: AuthRequest, r
             status: 'PAYMENT_PENDING'
         }
       });
+      await recordStatusChange(id, 'DRAFT', 'PAYMENT_PENDING', 'system', 'transfer.payment_started', { source: 'stripe' });
 
       res.status(200).json({
         clientSecret: paymentIntent.client_secret,
@@ -447,6 +450,51 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     }
 });
 
+// A customer can cancel a transfer only before paying for it. Once a card
+// payment has started (stripePaymentId set) it can't be cancelled here, so
+// nobody ends up charged for a cancelled transfer.
+const canCustomerCancel = (t: { status: string; stripePaymentId: string | null }) =>
+    t.status === 'DRAFT' || (t.status === 'PAYMENT_PENDING' && !t.stripePaymentId);
+
+// Endpoint -> Customer cancels their own unpaid transfer
+router.post('/:id/cancel', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.userId!;
+        const id = req.params.id;
+        if (!id) {
+            return res.status(400).json({ error: 'Transaction ID is required' });
+        }
+
+        const transaction = await prisma.transaction.findFirst({
+            where: { id, userId },
+            include: { user: { select: { email: true } }, recipient: { select: { name: true, phoneNumber: true, network: true } } }
+        });
+        if (!transaction) {
+            return res.status(404).json({ error: 'Transaction not found' });
+        }
+        if (!canCustomerCancel(transaction)) {
+            return res.status(409).json({ error: 'This transfer can no longer be cancelled. Contact MoneyWing if you need help.' });
+        }
+
+        // Only change it if nothing else changed it in the meantime.
+        const updated = await prisma.transaction.updateMany({
+            where: { id, userId, status: transaction.status, stripePaymentId: transaction.stripePaymentId },
+            data: { status: 'CANCELLED' }
+        });
+        if (updated.count === 0) {
+            return res.status(409).json({ error: 'This transfer was just updated. Refresh and try again.' });
+        }
+
+        await recordStatusChange(id, transaction.status, 'CANCELLED', transaction.user.email, 'transfer.customer_cancel');
+        sendEmailInBackground(transferCancelledEmail(transaction.user.email, transaction));
+
+        res.status(200).json({ id, status: 'CANCELLED' });
+    } catch (error: any) {
+        console.error('Cancel transaction error:', error);
+        res.status(500).json({ error: 'Failed to cancel the transfer' });
+    }
+});
+
 // Endpoint -> Get one of the user's transfers
 router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
@@ -467,7 +515,13 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
             return res.status(404).json({ error: 'Transaction not found'});
         }
 
-        res.status(200).json({ transaction: serializeTransaction(transaction) });
+        res.status(200).json({
+            transaction: {
+                ...serializeTransaction(transaction),
+                canCancel: canCustomerCancel(transaction),
+                timeline: await getTimeline(transaction.id, transaction.createdAt)
+            }
+        });
     } catch(error: any) {
         console.error('Get transaction error:', error);
         res.status(500).json({ error: 'Failed to fetch transaction'});

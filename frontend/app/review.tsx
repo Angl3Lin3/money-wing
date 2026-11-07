@@ -95,7 +95,7 @@ export default function ReviewScreen() {
       </Card>
 
       <AppButton title="Confirm" onPress={confirm} loading={confirming} />
-      <Caption center style={{ marginTop: spacing.sm }}>You&apos;ll pay by card in the next step.</Caption>
+      <Caption center style={{ marginTop: spacing.sm }}>You&apos;ll pay in the next step.</Caption>
     </Screen>
   );
 }

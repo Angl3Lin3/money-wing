@@ -191,8 +191,17 @@ export type TransactionStatus =
   | 'FAILED'
   | 'CANCELLED';
 
+export interface TimelineStep {
+  status: TransactionStatus;
+  at: string;
+  note?: string;
+}
+
 export interface Transaction {
   id: string;
+  recipientId?: string;
+  canCancel?: boolean;        // only on a single transfer
+  timeline?: TimelineStep[];  // only on a single transfer
   cadAmount: number;
   fee: number;
   exchangeRate: number;
@@ -222,6 +231,11 @@ export const transactionAPI = {
   list: async (before?: string): Promise<{ transactions: Transaction[]; hasMore: boolean }> => {
     const response = await api.get('/transaction', { params: { limit: 20, ...(before && { before }) } });
     return response.data;
+  },
+
+  // Cancel a transfer that hasn't been paid for.
+  cancel: async (id: string): Promise<void> => {
+    await api.post(`/transaction/${id}/cancel`);
   },
 
   get: async (id: string): Promise<Transaction> => {

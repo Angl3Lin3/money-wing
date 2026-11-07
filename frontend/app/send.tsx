@@ -10,13 +10,14 @@ import { showAlert } from "../services/alert";
 import { getErrorMessage, Quote, quoteAPI, Recipient, recipientAPI } from "../services/api";
 
 export default function SendScreen() {
-  const params = useLocalSearchParams<{ recipientId?: string }>();
+  const params = useLocalSearchParams<{ recipientId?: string; amount?: string }>();
 
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [loadingRecipients, setLoadingRecipients] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(params.recipientId ?? null);
 
-  const [amount, setAmount] = useState("");
+  // Pre-filled when coming from "Send again".
+  const [amount, setAmount] = useState(params.amount && /^\d+(\.\d{1,2})?$/.test(params.amount) ? params.amount : "");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoting, setQuoting] = useState(false);
