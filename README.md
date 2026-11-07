@@ -339,6 +339,37 @@ The changes that get harder the longer you wait, done early:
 
 The rest of the security work is listed in [Before going online](#before-going-online).
 
+### 14. Search, filters and spreadsheet export (developer area)
+
+All in the developer area's **Transfers** tab.
+
+**Search** (updates as you type) by any of:
+- reference: `MW-3F2A9C1B`, or just the start of it, like `3f2a`
+- customer email
+- recipient name
+- recipient phone, typed any way: `0701 234 567`, `+256 701...`
+- mobile money reference
+
+**Filters:** status, and date (Today, Last 7 days, This month, Last month, or a custom From/To range where "To" includes that whole day). Search and filters combine. It shows how many transfers match, 20 at a time, with **Load more**, and **Clear** resets everything.
+
+**Export to spreadsheet (CSV):** two ways to choose what goes in, ready for Excel, Numbers or Google Sheets (oldest first):
+- **Pick from your search results:** search, so only matching transfers are listed, then tick the ones you want (or **Select all**) and tap **Export selected (N)**. Ticks are **kept when you search again**, so you can collect transfers from several searches into one file (the bar shows how many came from other searches). **Clear selection** unticks everything; **Unselect these** unticks just the results on screen.
+- **All results:** with nothing ticked, the button exports every transfer matching the current search and filters, including ones not loaded on screen yet.
+- Columns:
+  - Reference, Transfer ID, Created, Status
+  - Customer email, Recipient name, Recipient phone, Network
+  - Customer paid (CAD), Fee (CAD), Converted (CAD), Exchange rate, Recipient gets (UGX)
+  - Payout method, Mobile money reference, Stripe payment ID, Last updated
+- Amounts come straight from the stored cents, so they're exact.
+- Times are in the business's time zone (`BUSINESS_TIMEZONE`, default `America/Toronto`, daylight saving included).
+- Phone numbers are written as `0772 123 456`, so spreadsheets don't drop the zero or turn them into scientific notation.
+- **Safe to open:** commas and quotes in names are escaped, and anything a customer typed that looks like a spreadsheet formula (e.g. a name starting with `=`) is neutralised so it can't run.
+- **Every export is recorded** in the action log (who, when, how many rows, and which filters or that it was a selection), because the file contains customer data. Store exported files somewhere private.
+
+**Also fixed:** "Load more" (here and in the customer's Transfer history) could skip transfers created at exactly the same moment. It now uses the transfer id as a tie-breaker.
+
+**Endpoints:** `GET /admin/transactions` now accepts `q`, `status`, `from`, `to`, `before` + `beforeId` and returns `total` and `hasMore`. New: `GET /admin/transactions/export` (same filters, returns the CSV) and `POST /admin/transactions/export` with `{ "ids": [...] }` for selected transfers (up to 1,000). `GET /admin/users` accepts `q` (email search).
+
 ---
 
 ## API reference
@@ -390,6 +421,7 @@ The settings file is `backend/.env`. **It holds secrets and is never committed t
 | `SMTP_PORT` / `SMTP_SECURE` | | `587` / `false` | Use `465` / `true` for services that require it |
 | `SMTP_USER` / `SMTP_PASS` | For real emails | | Email service login (e.g. Gmail address + app password) |
 | `EMAIL_FROM` | For real emails | | Sender, e.g. `MoneyWing <hello@yourdomain.com>` |
+| `BUSINESS_TIMEZONE` | | `America/Toronto` | Time zone used for dates in spreadsheet exports |
 | `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD` | | | Local only: auto-created developer account |
 | `STRIPE_SECRET_KEY` | For payments | | Stripe test key (`sk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | For payments | | Stripe webhook secret (`whsec_...`) |
@@ -438,6 +470,7 @@ money-wing/
 │       │   ├── email.service.ts   ★ sends emails (or keeps them for the Emails tab)
 │       │   ├── email.templates.ts ★ the wording of every email
 │       │   ├── status-history.service.ts ★ records status changes, builds the progress timeline
+│       │   ├── transfer-search.service.ts ★ search/filters, paging, spreadsheet export
 │       │   ├── stripe.service.ts
 │       │   └── payout.manager.ts  (mock payouts)
 │       └── utils/phone.ts       ★ Uganda phone number checks
@@ -475,6 +508,7 @@ money-wing/
     └── services/
         ├── api.ts                 all calls to the server
         ├── admin-api.ts         ★ calls for the developer area
+        ├── download.ts          ★ saves the exported spreadsheet
         ├── auth-storage.ts      ★ saves the customer and developer logins
         └── alert.ts             ★ popups that work on web and phones
 ```
@@ -503,6 +537,7 @@ With the app running:
 14. **Emails:** make a transfer and mark it delivered in Owner controls, then check the **Emails** tab for the receipt and the "Money delivered" email.
 15. **Progress tracker:** open a transfer, then in another tab use Owner controls to Simulate payment → Start sending → Mark delivered. The tracker moves along by itself within 15 seconds.
 16. **Send again / Cancel:** on an unpaid transfer, tap **Cancel transfer** (it turns to Cancelled and an email appears in the Emails tab). On any transfer, **Send again** opens Send Money already filled in.
+17. **Search and export:** in the developer area's **Transfers** tab, search for a recipient's name or paste a reference (`MW-...`), try the status and date filters, then tick a few transfers and **Export selected**, and open the file in a spreadsheet app. The export appears in Owner controls → Recent owner actions.
 
 ---
 

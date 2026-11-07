@@ -18,7 +18,9 @@ import {
   PricingInfo,
   TransferActionName,
   TransferActionRule,
+  TransferFilters,
 } from "../services/admin-api";
+import { saveTextFile } from "../services/download";
 import { confirmAction } from "../services/alert";
 import { getErrorMessage, TransactionStatus } from "../services/api";
 import { clearDevToken } from "../services/auth-storage";
@@ -53,8 +55,6 @@ const formatUptime = (seconds: number) => {
 export default function DevDashboard() {
   const [tab, setTab] = useState<Tab>("overview");
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [transfers, setTransfers] = useState<AdminTransaction[] | null>(null);
-  const [statusFilter, setStatusFilter] = useState<TransactionStatus | undefined>(undefined);
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
   const [emails, setEmails] = useState<EmailsData | null>(null);
@@ -73,7 +73,6 @@ export default function DevDashboard() {
     setError(null);
     try {
       if (tab === "overview") setOverview(await adminAPI.overview());
-      if (tab === "transfers") setTransfers(await adminAPI.transactions(statusFilter));
       if (tab === "users") setUsers(await adminAPI.users());
       if (tab === "activity") setActivity(await adminAPI.activity());
       if (tab === "emails") setEmails(await adminAPI.emails());
@@ -85,11 +84,11 @@ export default function DevDashboard() {
     } finally {
       setRefreshing(false);
     }
-  }, [tab, statusFilter, logout]);
+  }, [tab, logout]);
 
   // Load now, then refresh automatically.
   useEffect(() => {
-    if (tab === "checks" || tab === "owner") return; // these manage their own loading
+    if (tab === "checks" || tab === "owner" || tab === "transfers") return; // these manage their own loading
     load();
     const timer = setInterval(load, REFRESH_SECONDS * 1000);
     return () => clearInterval(timer);
@@ -119,7 +118,7 @@ export default function DevDashboard() {
         ))}
       </View>
 
-      {tab !== "checks" && tab !== "owner" && (
+      {tab !== "checks" && tab !== "owner" && tab !== "transfers" && (
         <View style={styles.refreshRow}>
           <Caption>
             {updatedAt ? `Updated ${updatedAt.toLocaleTimeString()} · refreshes every ${REFRESH_SECONDS}s` : "Loading..."}
@@ -136,7 +135,7 @@ export default function DevDashboard() {
       {tab === "owner" && <OwnerTab />}
       {tab === "checks" && <ChecksTab />}
       {tab === "transfers" && (
-        <TransfersTab data={transfers} filter={statusFilter} onFilter={setStatusFilter} onChanged={load} />
+        <TransfersTab />
       )}
       {tab === "users" && (users ? <UsersTab data={users} /> : <Loading />)}
       {tab === "emails" && (emails ? <EmailsTab data={emails} /> : <Loading />)}
@@ -273,44 +272,291 @@ function ChecksTab() {
 
 // ---------- Transfers ----------
 
-function TransfersTab({
-  data,
-  filter,
-  onFilter,
-  onChanged,
-}: {
-  data: AdminTransaction[] | null;
-  filter?: TransactionStatus;
-  onFilter: (s?: TransactionStatus) => void;
-  onChanged: () => void;
-}) {
+// Date ranges for the filter, in the viewer's local time.
+type RangeKey = "all" | "today" | "7d" | "month" | "lastMonth" | "custom";
+const RANGES: { key: RangeKey; label: string }[] = [
+  { key: "all", label: "All time" },
+  { key: "today", label: "Today" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "month", label: "This month" },
+  { key: "lastMonth", label: "Last month" },
+  { key: "custom", label: "Custom" },
+];
+
+// "2026-11-06" -> local midnight, or null if not a real date.
+const parseDay = (text: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text.trim());
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.getMonth() === Number(m[2]) - 1 ? d : null;
+};
+
+function rangeDates(key: RangeKey, customFrom: string, customTo: string): { from?: string; to?: string; invalid?: string } {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  switch (key) {
+    case "today":
+      return { from: startOfToday.toISOString(), to: addDays(startOfToday, 1).toISOString() };
+    case "7d":
+      return { from: addDays(startOfToday, -6).toISOString(), to: addDays(startOfToday, 1).toISOString() };
+    case "month":
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(), to: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString() };
+    case "lastMonth":
+      return { from: new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString(), to: new Date(now.getFullYear(), now.getMonth(), 1).toISOString() };
+    case "custom": {
+      const from = customFrom ? parseDay(customFrom) : null;
+      const to = customTo ? parseDay(customTo) : null;
+      if ((customFrom && !from) || (customTo && !to)) return { invalid: "Use dates like 2026-11-06." };
+      if (from && to && from > to) return { invalid: "The start date must be before the end date." };
+      return { ...(from && { from: from.toISOString() }), ...(to && { to: addDays(to, 1).toISOString() }) }; // "to" includes that whole day
+    }
+    default:
+      return {};
+  }
+}
+
+function TransfersTab() {
   const statuses = Object.keys(STATUS_INFO) as TransactionStatus[];
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState(""); // search text, applied shortly after typing stops
+  const [status, setStatus] = useState<TransactionStatus | undefined>(undefined);
+  const [range, setRange] = useState<RangeKey>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const [data, setData] = useState<AdminTransaction[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [rules, setRules] = useState<TransferActionRule[]>([]);
+  // Ticked transfers. Kept while the search changes, so you can tick results
+  // from several searches and export them together. "Clear selection" resets.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     adminAPI.transferActions().then(setRules).catch(() => setRules([]));
   }, []);
 
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const shownIds = (data ?? []).map((t) => t.id);
+  const allShownSelected = shownIds.length > 0 && shownIds.every((id) => selected.has(id));
+  const toggleAllShown = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allShownSelected) shownIds.forEach((id) => next.delete(id));
+      else shownIds.forEach((id) => next.add(id));
+      return next;
+    });
+
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const dates = rangeDates(range, customFrom, customTo);
+  const filters: TransferFilters = { q: query || undefined, status, from: dates.from, to: dates.to };
+  const filterKey = JSON.stringify(filters);
+  const filtersActive = Boolean(query || status || range !== "all");
+
+  const load = useCallback(async () => {
+    if (dates.invalid) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const page = await adminAPI.transactions(JSON.parse(filterKey));
+      setData(page.transactions);
+      setTotal(page.total);
+      setHasMore(page.hasMore);
+    } catch (e: any) {
+      setMessage({ tone: "danger", text: getErrorMessage(e, "Could not load transfers") });
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // A new search closes any open "Manage" panel (ticks are kept).
+  useEffect(() => {
+    setOpenId(null);
+  }, [filterKey]);
+
+  const loadMore = async () => {
+    const last = data?.[data.length - 1];
+    if (!last) return;
+    setLoadingMore(true);
+    try {
+      const page = await adminAPI.transactions(filters, { createdAt: last.createdAt, id: last.id });
+      setData((list) => [...(list ?? []), ...page.transactions]);
+      setHasMore(page.hasMore);
+    } catch (e: any) {
+      setMessage({ tone: "danger", text: getErrorMessage(e, "Could not load more") });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const exportCsv = async () => {
+    setExporting(true);
+    setMessage(null);
+    try {
+      const count = selected.size || total;
+      const { csv, filename } = selected.size
+        ? await adminAPI.exportSelectedTransactions([...selected])
+        : await adminAPI.exportTransactions(filters);
+      await saveTextFile(filename, csv);
+      setMessage({ tone: "success", text: `Exported ${count} transfer${count === 1 ? "" : "s"} to ${filename}.` });
+    } catch (e: any) {
+      setMessage({ tone: "danger", text: getErrorMessage(e, "Could not export") });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setQuery("");
+    setStatus(undefined);
+    setRange("all");
+    setCustomFrom("");
+    setCustomTo("");
+  };
+
   return (
     <>
-      <View style={styles.filters}>
-        <FilterChip label="All" active={!filter} onPress={() => onFilter(undefined)} />
-        {statuses.map((s) => (
-          <FilterChip key={s} label={STATUS_INFO[s].label} active={filter === s} onPress={() => onFilter(s)} />
-        ))}
-      </View>
+      <Card>
+        <TextField
+          label="Search"
+          placeholder="Reference (MW-...), email, recipient name or phone"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        <Text style={styles.filterLabel}>Status</Text>
+        <View style={styles.filters}>
+          <FilterChip label="All" active={!status} onPress={() => setStatus(undefined)} />
+          {statuses.map((s) => (
+            <FilterChip key={s} label={STATUS_INFO[s].label} active={status === s} onPress={() => setStatus(s)} />
+          ))}
+        </View>
+
+        <Text style={styles.filterLabel}>Date</Text>
+        <View style={styles.filters}>
+          {RANGES.map((r) => (
+            <FilterChip key={r.key} label={r.label} active={range === r.key} onPress={() => setRange(r.key)} />
+          ))}
+        </View>
+        {range === "custom" && (
+          <View style={styles.dateRow}>
+            <View style={{ flex: 1 }}>
+              <TextField label="From" placeholder="2026-11-01" value={customFrom} onChangeText={setCustomFrom} autoCapitalize="none" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <TextField label="To (inclusive)" placeholder="2026-11-30" value={customTo} onChangeText={setCustomTo} autoCapitalize="none" />
+            </View>
+          </View>
+        )}
+        {dates.invalid && <Notice tone="danger">{dates.invalid}</Notice>}
+
+        <View style={styles.resultsRow}>
+          <Caption>
+            {loading ? "Searching..." : filtersActive ? `${total} result${total === 1 ? "" : "s"}` : `${total} transfer${total === 1 ? "" : "s"} in total`}
+          </Caption>
+          <View style={{ flexDirection: "row", gap: spacing.lg }}>
+            {filtersActive && (
+              <Pressable onPress={clearFilters} hitSlop={8}>
+                <Text style={styles.refresh}>Clear</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={load} disabled={loading} hitSlop={8}>
+              <Text style={styles.refresh}>Refresh</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {selected.size > 0 && (
+          <View style={styles.selectionBar}>
+            <Text style={styles.selectionText}>
+              {selected.size} selected
+              {(() => {
+                const elsewhere = [...selected].filter((id) => !shownIds.includes(id)).length;
+                return elsewhere ? ` (${elsewhere} from other searches)` : "";
+              })()}
+            </Text>
+            <Pressable onPress={() => setSelected(new Set())} hitSlop={8}>
+              <Text style={styles.refresh}>Clear selection</Text>
+            </Pressable>
+          </View>
+        )}
+        <AppButton
+          title={
+            selected.size
+              ? `Export selected (${selected.size}) to spreadsheet`
+              : `Export ${filtersActive ? "all results" : "all"} (${total}) to spreadsheet`
+          }
+          variant={selected.size ? "primary" : "secondary"}
+          onPress={exportCsv}
+          loading={exporting}
+          disabled={selected.size === 0 && (total === 0 || Boolean(dates.invalid))}
+        />
+        <Caption style={{ marginTop: 6 }}>
+          Tick the results you want; ticks stay when you search again, so you can collect transfers from several
+          searches. With nothing ticked, all results are exported. Opens in Excel, Numbers or Google Sheets. Exports
+          are recorded in the action log because they contain customer data.
+        </Caption>
+      </Card>
+
+      {message && <Notice tone={message.tone}>{message.text}</Notice>}
+
       {!data ? (
         <Loading />
       ) : data.length === 0 ? (
-        <Card><Caption>No transfers{filter ? " with this status" : " yet"}.</Caption></Card>
+        <Card><Caption>{filtersActive ? "No transfers match these filters." : "No transfers yet."}</Caption></Card>
       ) : (
         <Card>
-          {data.map((t, i) => (
-            <View key={t.id} style={i > 0 && styles.rowBorder}>
+          <Pressable onPress={toggleAllShown} style={styles.selectAll} accessibilityRole="checkbox" accessibilityState={{ checked: allShownSelected }}>
+            <Checkbox checked={allShownSelected} />
+            <Text style={styles.selectAllText}>
+              {allShownSelected ? "Unselect these" : `Select all ${hasMore ? "shown " : ""}(${shownIds.length})`}
+            </Text>
+          </Pressable>
+          {hasMore && (
+            <Caption style={{ marginBottom: spacing.sm }}>
+              {total - shownIds.length} more result{total - shownIds.length === 1 ? "" : "s"} below. Tap Load more to see and select them.
+            </Caption>
+          )}
+          {data.map((t) => (
+            <View key={t.id} style={styles.rowBorder}>
+              <View style={styles.selectRow}>
+              <Pressable
+                onPress={() => toggle(t.id)}
+                hitSlop={10}
+                style={styles.checkboxHit}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selected.has(t.id) }}
+                accessibilityLabel={`Select ${shortReference(t.id)}`}
+              >
+                <Checkbox checked={selected.has(t.id)} />
+              </Pressable>
               <Pressable
                 onPress={() => setOpenId(openId === t.id ? null : t.id)}
-                style={({ pressed }) => [styles.listRow, pressed && { opacity: 0.6 }]}
+                style={({ pressed }) => [styles.listRow, { flex: 1 }, pressed && { opacity: 0.6 }]}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: openId === t.id }}
               >
@@ -322,8 +568,7 @@ function TransfersTab({
                     {t.user.email} → {t.recipient.name} ({formatPhone(t.recipient.phoneNumber)}, {t.recipient.network})
                   </Text>
                   <Text style={styles.rowSub}>
-                    {shortReference(t.id)} · {timeAgo(t.createdAt)}
-                    {t.stripePaymentId ? " · Stripe ✓" : ""}
+                    {shortReference(t.id)} · {new Date(t.createdAt).toLocaleString()}
                     {t.providerPayoutRef ? ` · Ref ${t.providerPayoutRef}` : ""}
                   </Text>
                 </View>
@@ -332,18 +577,21 @@ function TransfersTab({
                   <Text style={styles.manage}>{openId === t.id ? "Close ▲" : "Manage ▼"}</Text>
                 </View>
               </Pressable>
+              </View>
               {openId === t.id && (
-                <TransferPanel
-                  transfer={t}
-                  rules={rules.filter((r) => r.from.includes(t.status))}
-                  onChanged={onChanged}
-                />
+                <TransferPanel transfer={t} rules={rules.filter((r) => r.from.includes(t.status))} onChanged={load} />
               )}
             </View>
           ))}
         </Card>
       )}
-      <Caption center>Showing the latest 20. Tap a transfer to manage it.</Caption>
+
+      {hasMore && <AppButton title="Load more" variant="ghost" onPress={loadMore} loading={loadingMore} />}
+      {data && data.length > 0 && (
+        <Caption center>
+          Showing {data.length} of {total}. Tap a transfer to manage it.
+        </Caption>
+      )}
     </>
   );
 }
@@ -456,6 +704,14 @@ function TransferPanel({ transfer, rules, onChanged }: { transfer: AdminTransact
       ) : (
         history.map((e) => <AuditRow key={e.id} entry={e} />)
       )}
+    </View>
+  );
+}
+
+function Checkbox({ checked }: { checked: boolean }) {
+  return (
+    <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+      {checked && <Text style={styles.checkmark}>✓</Text>}
     </View>
   );
 }
@@ -590,6 +846,17 @@ function describeAudit(e: AuditEntry): string {
     const names = { exchangeRate: "rate", feePercent: "fee %", minCad: "min $", maxCad: "max $" };
     const parts = keys.filter((k) => d.before?.[k] !== d.after?.[k]).map((k) => `${names[k]} ${d.before?.[k]} → ${d.after?.[k]}`);
     return `Changed pricing: ${parts.join(", ") || "no change"}`;
+  }
+  if (e.action === "export.transfers") {
+    if (d.selected) return `Exported ${d.rows} selected transfer${d.rows === 1 ? "" : "s"} to a spreadsheet`;
+    const f = d.filters ?? {};
+    const parts = [
+      f.q && `search "${f.q}"`,
+      f.status && (STATUS_INFO[f.status as TransactionStatus]?.label ?? f.status),
+      (f.from || f.to) &&
+        `${f.from ? new Date(f.from).toLocaleDateString() : "start"} to ${f.to ? new Date(new Date(f.to).getTime() - 1).toLocaleDateString() : "now"}`,
+    ].filter(Boolean);
+    return `Exported ${d.rows} transfer${d.rows === 1 ? "" : "s"} to a spreadsheet${parts.length ? ` (${parts.join(", ")})` : ""}`;
   }
   const ref = e.targetId ? shortReference(e.targetId) : "";
   const to = d.to && STATUS_INFO[d.to as TransactionStatus] ? STATUS_INFO[d.to as TransactionStatus].label : d.to;
@@ -789,6 +1056,18 @@ const styles = StyleSheet.create({
   method: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textSecondary, width: 52 },
   path: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.text, flex: 1, minWidth: 0 },
   manage: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.secondary },
+  selectionBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: colors.secondarySoft, borderRadius: radius.row, padding: spacing.md, marginBottom: spacing.md },
+  selectionText: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.secondary },
+  selectAll: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm },
+  selectAllText: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textSecondary },
+  selectRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  checkboxHit: { paddingVertical: spacing.md },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  checkboxChecked: { backgroundColor: colors.secondary, borderColor: colors.secondary },
+  checkmark: { color: "#fff", fontFamily: fonts.bold, fontSize: 13, lineHeight: 16 },
+  filterLabel: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textSecondary, marginBottom: 6 },
+  dateRow: { flexDirection: "row", gap: spacing.md },
+  resultsRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginVertical: spacing.md },
   panel: { backgroundColor: colors.background, borderRadius: radius.row, padding: spacing.lg, marginBottom: spacing.md },
   preview: { backgroundColor: colors.primarySoft, borderRadius: radius.row, padding: spacing.md, marginBottom: spacing.lg },
   previewLabel: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.primary },

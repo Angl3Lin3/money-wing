@@ -7,6 +7,7 @@ import { calculateQuote, QuoteError } from '../services/pricing.service';
 import { sendEmailInBackground } from '../services/email.service';
 import { transferCancelledEmail, transferCreatedEmail } from '../services/email.templates';
 import { getTimeline, recordStatusChange } from '../services/status-history.service';
+import { afterCursor, newestFirst } from '../services/transfer-search.service';
 
 
 
@@ -419,7 +420,7 @@ router.post('/:id/payment-intent', authenticateToken, async( req: AuthRequest, r
 
 
 // Endpoint -> List the user's transfers (newest first)
-// Optional: ?limit=20&before=<ISO date> to load older pages.
+// Optional: ?limit=20&before=<ISO date>&beforeId=<id> to load older pages.
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.userId;
@@ -428,15 +429,17 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         }
 
         const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100);
-        const before = req.query.before ? new Date(String(req.query.before)) : null;
-        if (before && isNaN(before.getTime())) {
+        let cursor;
+        try {
+            cursor = afterCursor(req.query);
+        } catch (e) {
             return res.status(400).json({ error: 'Invalid "before" date'});
         }
 
         const transactions = await prisma.transaction.findMany({
-            where: { userId, ...(before && { createdAt: { lt: before } }) },
+            where: cursor ? { AND: [{ userId }, cursor] } : { userId },
             include: { recipient: { select: { name: true, phoneNumber: true, network: true } } },
-            orderBy: { createdAt: 'desc' },
+            orderBy: newestFirst,
             take: limit + 1 // one extra tells us whether there are more
         });
 

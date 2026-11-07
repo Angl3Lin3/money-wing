@@ -116,6 +116,16 @@ export interface OutboxEmail {
   text?: string;
 }
 
+export interface TransferFilters {
+  q?: string;
+  status?: TransactionStatus;
+  from?: string; // ISO date-time
+  to?: string;   // ISO date-time
+}
+
+const cleanFilters = (f: TransferFilters) =>
+  Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined && v !== ''));
+
 export const adminAPI = {
   emails: async (): Promise<{ configured: boolean; setup: string; emails: OutboxEmail[] }> =>
     (await adminApi.get('/admin/emails')).data,
@@ -132,8 +142,39 @@ export const adminAPI = {
 
   overview: async (): Promise<Overview> => (await adminApi.get('/admin/overview')).data,
   users: async (): Promise<AdminUser[]> => (await adminApi.get('/admin/users')).data.users,
-  transactions: async (status?: TransactionStatus): Promise<AdminTransaction[]> =>
-    (await adminApi.get('/admin/transactions', { params: status ? { status } : {} })).data.transactions,
+  // `after`: the last transfer shown, to load the next page.
+  transactions: async (
+    filters: TransferFilters = {},
+    after?: { createdAt: string; id: string }
+  ): Promise<{ transactions: AdminTransaction[]; total: number; hasMore: boolean }> =>
+    (
+      await adminApi.get('/admin/transactions', {
+        params: { ...cleanFilters(filters), ...(after && { before: after.createdAt, beforeId: after.id }) },
+      })
+    ).data,
+
+  // The spreadsheet (CSV) text for the same filters.
+  exportTransactions: async (filters: TransferFilters = {}): Promise<{ csv: string; filename: string }> => {
+    const response = await adminApi.get('/admin/transactions/export', {
+      params: cleanFilters(filters),
+      responseType: 'text',
+      transformResponse: (data) => data, // keep it as plain text
+      timeout: 60000,
+    });
+    const match = /filename="([^"]+)"/.exec(response.headers['content-disposition'] ?? '');
+    return { csv: response.data, filename: match?.[1] ?? 'moneywing-transfers.csv' };
+  },
+
+  // The spreadsheet (CSV) text for just the selected transfers.
+  exportSelectedTransactions: async (ids: string[]): Promise<{ csv: string; filename: string }> => {
+    const response = await adminApi.post('/admin/transactions/export', { ids }, {
+      responseType: 'text',
+      transformResponse: (data) => data,
+      timeout: 60000,
+    });
+    const match = /filename="([^"]+)"/.exec(response.headers['content-disposition'] ?? '');
+    return { csv: response.data, filename: match?.[1] ?? 'moneywing-transfers.csv' };
+  },
   activity: async (): Promise<Activity> => (await adminApi.get('/admin/activity')).data,
 
   // Quick checks that the main parts of the API answer. Each returns how long it took.

@@ -228,8 +228,8 @@ export const transactionAPI = {
   },
 
   // Newest first. Pass the oldest loaded date as `before` to get the next page.
-  list: async (before?: string): Promise<{ transactions: Transaction[]; hasMore: boolean }> => {
-    const response = await api.get('/transaction', { params: { limit: 20, ...(before && { before }) } });
+  list: async (before?: string, beforeId?: string): Promise<{ transactions: Transaction[]; hasMore: boolean }> => {
+    const response = await api.get('/transaction', { params: { limit: 20, ...(before && { before }), ...(beforeId && { beforeId }) } });
     return response.data;
   },
 

@@ -1,10 +1,11 @@
 // Developer area: lets the team see how the app is working.
 // Every route here requires a login from an email listed in ADMIN_EMAILS.
 import express, { Response } from 'express';
-import { PrismaClient, TransactionStatus } from '@prisma/client';
+import { Prisma, PrismaClient, TransactionStatus } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { adminEmails, requireAdmin } from '../middleware/admin';
 import { getActivity } from '../services/monitor.service';
+import { afterCursor, buildWhere, newestFirst, parseFilters, SearchError, toCsv, transferSelect } from '../services/transfer-search.service';
 import { emailSetupSummary, getOutbox, sendEmailInBackground } from '../services/email.service';
 import { transferCancelledEmail, transferDeliveredEmail, transferFailedEmail } from '../services/email.templates';
 import { getPricing, getPricingInfo, PricingError, savePricing } from '../services/pricing.service';
@@ -13,6 +14,11 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 router.use(authenticateToken, requireAdmin);
+
+// Writes a permanent record of an owner action.
+const audit = (actorEmail: string, action: string, targetId: string | null, details: object) =>
+    prisma.auditLog.create({ data: { actorEmail, action, targetId, details: details as any } });
+
 
 const PAID_STATUSES: TransactionStatus[] = ['FUNDED', 'PAYOUT_PENDING', 'COMPLETED'];
 
@@ -96,7 +102,9 @@ router.get('/overview', async (_req: AuthRequest, res: Response) => {
 router.get('/users', async (req: AuthRequest, res: Response) => {
     try {
         const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100);
+        const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
         const users = await prisma.user.findMany({
+            where: q ? { email: { contains: q, mode: 'insensitive' } } : {},
             orderBy: { createdAt: 'desc' },
             take: limit,
             select: {
@@ -115,47 +123,107 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Most recent transfers from all customers. Optional ?status=DRAFT etc.
+// Transfers from all customers, newest first, with search and filters:
+//   ?q=      reference (MW-...), customer email, recipient name or phone, payout reference
+//   ?status= one status    ?from= / ?to= dates (ISO)
+//   ?before= load the next page (createdAt of the last one shown)
 router.get('/transactions', async (req: AuthRequest, res: Response) => {
     try {
         const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100);
-        const status = typeof req.query.status === 'string' ? (req.query.status as TransactionStatus) : undefined;
-        if (status && !Object.values(TransactionStatus).includes(status)) {
-            return res.status(400).json({ error: 'Unknown status' });
-        }
-        const transactions = await prisma.transaction.findMany({
-            where: status ? { status } : {},
-            orderBy: { createdAt: 'desc' },
-            take: limit,
-            select: {
-                id: true,
-                cadAmountCents: true,
-                feeCents: true,
-                exchangeRate: true,
-                ugxAmount: true,
-                status: true,
-                provider: true,
-                stripePaymentId: true,
-                providerPayoutRef: true,
-                createdAt: true,
-                updatedAt: true,
-                user: { select: { email: true } },
-                recipient: { select: { name: true, phoneNumber: true, network: true } },
-            },
-        });
+        const filters = parseFilters(req.query);
+        const cursor = afterCursor(req.query);
+        const where = buildWhere(filters);
+
+        const [transactions, total] = await Promise.all([
+            prisma.transaction.findMany({
+                where: cursor ? { AND: [where, cursor] } : where,
+                orderBy: newestFirst,
+                take: limit + 1, // one extra tells us whether there are more
+                select: transferSelect,
+            }),
+            prisma.transaction.count({ where }),
+        ]);
+
         // Stored in cents; the developer area works in dollars.
         res.json({
-            transactions: transactions.map(({ cadAmountCents, feeCents, ...t }) => ({
+            total,
+            hasMore: transactions.length > limit,
+            transactions: transactions.slice(0, limit).map(({ cadAmountCents, feeCents, ...t }) => ({
                 ...t,
                 cadAmount: cadAmountCents / 100,
                 fee: feeCents / 100,
             })),
         });
     } catch (error: any) {
+        if (error instanceof SearchError) return res.status(400).json({ error: error.message });
         console.error('Admin transactions error:', error);
         res.status(500).json({ error: 'Failed to load transactions' });
     }
 });
+
+// Spreadsheet (CSV) exports, for bookkeeping. Two ways to choose what goes in:
+//   GET  /transactions/export?q=&status=&from=&to=  -> everything matching the filters
+//   POST /transactions/export  { ids: [...] }        -> just the transfers you selected
+// Every export is recorded in the action log, because it contains customer data.
+const MAX_EXPORT_ROWS = 50000;
+const MAX_SELECTED = 1000;
+
+async function sendExport(req: AuthRequest, res: Response, where: Prisma.TransactionWhereInput, logDetails: object) {
+    const transfers = await prisma.transaction.findMany({
+        where,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], // oldest first reads naturally in a ledger
+        take: MAX_EXPORT_ROWS,
+        select: transferSelect,
+    });
+
+    await audit(req.adminEmail!, 'export.transfers', null, { rows: transfers.length, ...logDetails });
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="moneywing-transfers-${stamp}.csv"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(toCsv(transfers));
+}
+
+router.get('/transactions/export', async (req: AuthRequest, res: Response) => {
+    try {
+        const filters = parseFilters(req.query);
+        await sendExport(req, res, buildWhere(filters), {
+            filters: {
+                ...(filters.q && { q: filters.q }),
+                ...(filters.status && { status: filters.status }),
+                ...(filters.from && { from: filters.from.toISOString() }),
+                ...(filters.to && { to: filters.to.toISOString() }),
+            },
+        });
+    } catch (error: any) {
+        if (error instanceof SearchError) return res.status(400).json({ error: error.message });
+        console.error('Export error:', error);
+        res.status(500).json({ error: 'Failed to export transfers' });
+    }
+});
+
+router.post('/transactions/export', async (req: AuthRequest, res: Response) => {
+    try {
+        const raw = req.body?.ids;
+        if (!Array.isArray(raw) || raw.length === 0) {
+            return res.status(400).json({ error: 'Select at least one transfer to export' });
+        }
+        if (raw.length > MAX_SELECTED) {
+            return res.status(400).json({ error: `You can export at most ${MAX_SELECTED} selected transfers at once` });
+        }
+        const valid = raw.filter((id): id is string => typeof id === 'string' && /^[0-9a-zA-Z-]{1,64}$/.test(id));
+        if (valid.length !== raw.length) {
+            return res.status(400).json({ error: 'Some selected transfers are not valid' });
+        }
+        const ids = [...new Set(valid)]; // the same transfer selected twice counts once
+        await sendExport(req, res, { id: { in: ids } }, { selected: ids.length });
+    } catch (error: any) {
+        console.error('Export error:', error);
+        res.status(500).json({ error: 'Failed to export transfers' });
+    }
+});
+
 
 // Recent requests and errors since the server started.
 router.get('/activity', (_req: AuthRequest, res: Response) => {
@@ -178,10 +246,6 @@ router.get('/activity', (_req: AuthRequest, res: Response) => {
 // ---------------------------------------------------------------------------
 // Owner controls
 // ---------------------------------------------------------------------------
-
-// Writes a permanent record of an owner action.
-const audit = (actorEmail: string, action: string, targetId: string | null, details: object) =>
-    prisma.auditLog.create({ data: { actorEmail, action, targetId, details: details as any } });
 
 // Current rate, fee and limits, and who last changed them.
 router.get('/settings', async (_req: AuthRequest, res: Response) => {

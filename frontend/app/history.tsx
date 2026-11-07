@@ -58,7 +58,7 @@ export default function HistoryScreen() {
     if (!oldest) return;
     setLoadingMore(true);
     try {
-      const page = await transactionAPI.list(oldest.createdAt);
+      const page = await transactionAPI.list(oldest.createdAt, oldest.id);
       setTransfers((list) => [...list, ...page.transactions]);
       setHasMore(page.hasMore);
     } catch (e: any) {
