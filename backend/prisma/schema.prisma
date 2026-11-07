@@ -32,10 +32,10 @@ model OtpToken {
 
 model Transaction {
   id                String            @id @default(uuid())
-  cadAmount         Float
-  fee               Float
+  cadAmountCents    Int // what the customer pays, in cents (100 = $1.00)
+  feeCents          Int // MoneyWing's fee, in cents (part of cadAmountCents)
   exchangeRate      Float
-  ugxAmount         Float
+  ugxAmount         Int // what the recipient gets, in whole shillings
   status            TransactionStatus @default(DRAFT)
   stripePaymentId   String?
   createdAt         DateTime          @default(now())

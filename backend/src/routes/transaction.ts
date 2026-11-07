@@ -19,8 +19,9 @@ function serializeTransaction(transaction: TransactionWithRecipient) {
     return {
         id: transaction.id,
         recipientId: transaction.recipientId,
-        cadAmount: transaction.cadAmount,
-        fee: transaction.fee,
+        // Stored in cents; the app works in dollars.
+        cadAmount: transaction.cadAmountCents / 100,
+        fee: transaction.feeCents / 100,
         exchangeRate: transaction.exchangeRate,
         ugxAmount: transaction.ugxAmount,
         status: transaction.status,
@@ -313,7 +314,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
             where: {
                 userId,
                 recipientId,
-                cadAmount: quote.cadAmount,
+                cadAmountCents: quote.cadAmountCents,
                 status: 'DRAFT',
                 createdAt: { gte: new Date(Date.now() - 30 * 1000) }
             },
@@ -330,8 +331,8 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         // Create transaction record
         const transaction = await prisma.transaction.create({
             data: {
-                cadAmount: quote.cadAmount,
-                fee: quote.fee,
+                cadAmountCents: quote.cadAmountCents,
+                feeCents: quote.feeCents,
                 exchangeRate: quote.exchangeRate,
                 ugxAmount: quote.ugxAmount,
                 status: 'DRAFT',
@@ -391,7 +392,7 @@ router.post('/:id/payment-intent', authenticateToken, async( req: AuthRequest, r
       }
 
       // Create Stripe payment intent
-      const paymentIntent = await stripeService.createPaymentIntent(transaction.cadAmount);
+      const paymentIntent = await stripeService.createPaymentIntent(transaction.cadAmountCents);
 
       // Update transaction with Stripe payment ID 
       const updatedTransaction = await prisma.transaction.update({
@@ -406,7 +407,7 @@ router.post('/:id/payment-intent', authenticateToken, async( req: AuthRequest, r
       res.status(200).json({
         clientSecret: paymentIntent.client_secret,
         transactionId: updatedTransaction.id,
-        amount: updatedTransaction.cadAmount,
+        amount: updatedTransaction.cadAmountCents / 100,
         status: updatedTransaction.status
       });
 

@@ -41,15 +41,15 @@ router.get('/overview', async (_req: AuthRequest, res: Response) => {
         const [usersByStatus, recipients, transfersByStatus, newUsers24h, newTransfers24h, paidVolume] = await Promise.all([
             prisma.user.groupBy({ by: ['status'], _count: { _all: true } }),
             prisma.recipient.count(),
-            prisma.transaction.groupBy({ by: ['status'], _count: { _all: true }, _sum: { cadAmount: true } }),
+            prisma.transaction.groupBy({ by: ['status'], _count: { _all: true }, _sum: { cadAmountCents: true } }),
             prisma.user.count({ where: { createdAt: { gte: dayAgo } } }),
             prisma.transaction.count({ where: { createdAt: { gte: dayAgo } } }),
-            prisma.transaction.aggregate({ where: { status: { in: PAID_STATUSES } }, _sum: { cadAmount: true } }),
+            prisma.transaction.aggregate({ where: { status: { in: PAID_STATUSES } }, _sum: { cadAmountCents: true } }),
         ]);
 
         const userCounts = Object.fromEntries(usersByStatus.map((u) => [u.status, u._count._all]));
         const transferCounts = Object.fromEntries(
-            transfersByStatus.map((t) => [t.status, { count: t._count._all, cadAmount: t._sum.cadAmount ?? 0 }])
+            transfersByStatus.map((t) => [t.status, { count: t._count._all, cadAmount: (t._sum.cadAmountCents ?? 0) / 100 }])
         );
 
         res.json({
@@ -82,7 +82,7 @@ router.get('/overview', async (_req: AuthRequest, res: Response) => {
                     total: transfersByStatus.reduce((n, t) => n + t._count._all, 0),
                     newLast24h: newTransfers24h,
                     byStatus: transferCounts,
-                    paidVolumeCad: paidVolume._sum.cadAmount ?? 0,
+                    paidVolumeCad: (paidVolume._sum.cadAmountCents ?? 0) / 100,
                 },
             },
         });
@@ -129,8 +129,8 @@ router.get('/transactions', async (req: AuthRequest, res: Response) => {
             take: limit,
             select: {
                 id: true,
-                cadAmount: true,
-                fee: true,
+                cadAmountCents: true,
+                feeCents: true,
                 exchangeRate: true,
                 ugxAmount: true,
                 status: true,
@@ -143,7 +143,14 @@ router.get('/transactions', async (req: AuthRequest, res: Response) => {
                 recipient: { select: { name: true, phoneNumber: true, network: true } },
             },
         });
-        res.json({ transactions });
+        // Stored in cents; the developer area works in dollars.
+        res.json({
+            transactions: transactions.map(({ cadAmountCents, feeCents, ...t }) => ({
+                ...t,
+                cadAmount: cadAmountCents / 100,
+                fee: feeCents / 100,
+            })),
+        });
     } catch (error: any) {
         console.error('Admin transactions error:', error);
         res.status(500).json({ error: 'Failed to load transactions' });

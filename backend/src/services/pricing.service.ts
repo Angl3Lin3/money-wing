@@ -29,6 +29,8 @@ export interface PricingInfo {
 }
 
 export interface Quote {
+    cadAmountCents: number; // exact amount in cents (what gets stored)
+    feeCents: number;       // exact fee in cents
     cadAmount: number;      // what the customer pays, in CAD
     fee: number;            // MoneyWing's fee, in CAD (taken out of cadAmount)
     exchangeRate: number;   // UGX per CAD
@@ -142,6 +144,8 @@ export async function calculateQuote(rawAmount: unknown): Promise<Quote> {
     const sendCents = amountCents - feeCents;
 
     return {
+        cadAmountCents: amountCents,
+        feeCents,
         cadAmount: amountCents / 100,
         fee: feeCents / 100,
         exchangeRate,

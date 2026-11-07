@@ -8,7 +8,7 @@ const ORANGE = '#FC4C02';
 const escapeHtml = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-const cad = (n: number) => `$${n.toFixed(2)} CAD`;
+const cad = (cents: number) => `$${(cents / 100).toFixed(2)} CAD`;
 const ugx = (n: number) => `${Math.floor(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} UGX`;
 const reference = (id: string) => `MW-${id.slice(0, 8).toUpperCase()}`;
 const phone = (p: string) => p.replace(/^\+256(\d{3})(\d{3})(\d{3})$/, '+256 $1 $2 $3');
@@ -44,10 +44,11 @@ const rows = (pairs: [string, string][]) =>
         .map(([k, v]) => `<tr><td style="color:#777">${escapeHtml(k)}</td><td align="right"><b>${escapeHtml(v)}</b></td></tr>`)
         .join('')}</table>`;
 
+// A transfer as stored in the database (amounts in cents / whole shillings).
 export interface TransferForEmail {
     id: string;
-    cadAmount: number;
-    fee: number;
+    cadAmountCents: number;
+    feeCents: number;
     exchangeRate: number;
     ugxAmount: number;
     recipient: { name: string; phoneNumber: string; network: string };
@@ -57,8 +58,8 @@ const transferRows = (t: TransferForEmail): [string, string][] => [
     ['Reference', reference(t.id)],
     ['Recipient', t.recipient.name],
     ['Mobile money', `${phone(t.recipient.phoneNumber)} (${t.recipient.network})`],
-    ['You pay', cad(t.cadAmount)],
-    ['Fee (included)', cad(t.fee)],
+    ['You pay', cad(t.cadAmountCents)],
+    ['Fee (included)', cad(t.feeCents)],
     ['Exchange rate', `1 CAD = ${ugx(t.exchangeRate)}`],
     ['They receive', ugx(t.ugxAmount)],
 ];

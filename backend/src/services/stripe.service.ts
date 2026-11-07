@@ -10,10 +10,11 @@ if(!stripeSecretKey) {
 export const stripe = new Stripe(stripeSecretKey || 'sk_test_not_configured')
 
 export class StripeService {
-    async createPaymentIntent(amount: number, currency: string = 'cad') {
+    // amountCents: the exact amount in cents, as stored (Stripe also uses cents).
+    async createPaymentIntent(amountCents: number, currency: string = 'cad') {
         try {
             const paymentIntent = await stripe.paymentIntents.create({
-                amount: Math.round(amount * 100), // Convert to cents 
+                amount: amountCents,
                 currency: currency,
                 // payment_method_types: ['card'],
                 automatic_payment_methods: {

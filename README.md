@@ -17,7 +17,8 @@ This is a fork of the original MoneyWing project. This README explains how to ru
 5. [Configuration (.env)](#configuration-env)
 6. [Project structure](#project-structure)
 7. [How to test](#how-to-test)
-8. [Not done yet](#not-done-yet)
+8. [Before going online](#before-going-online)
+9. [Not done yet](#not-done-yet)
 
 ---
 
@@ -39,7 +40,7 @@ The original project ran its server on Heroku. **That Heroku server has been del
 
 ### What you need
 
-- **Node.js** 18 or newer
+- **Node.js** 22 (the version the project now targets; newer versions should also work)
 - **PostgreSQL**: on a Mac, the easiest option is [Postgres.app](https://postgresapp.com) (open it and click *Initialize*)
 
 ### First-time setup
@@ -147,7 +148,7 @@ Screen: **Send Money**.
 - **The quote updates as you type:** fee, amount converted, exchange rate, and exactly how many UGX the recipient gets.
 - **Pricing lives in one place:** `backend/src/services/pricing.service.ts`. Before, the rate and fee were copy-pasted in two places.
 - **Rate, fee and limits can be changed from `.env`** without editing code (see [Configuration](#configuration-env)).
-- **Money maths is done in cents**, so there are no rounding errors like `$1.9999999`. UGX amounts are whole shillings.
+- **Money is calculated and stored in exact whole cents** (and UGX in whole shillings), so there are no rounding errors like `$1.9999999`. See [Security tidy-up](#13-security-tidy-up).
 - **Amounts are validated:** no letters, negatives, or more than 2 decimals, and the minimum and maximum limits are applied.
 
 > ⚠️ **Confirm:** the rate (2,800 UGX per CAD), fee (2%) and limits ($5 to $3,000) are placeholders.
@@ -328,6 +329,16 @@ All on a transfer's screen (Transfer history → tap a transfer).
 
 **New endpoint:** `POST /transaction/:id/cancel`. `GET /transaction/:id` now also returns `timeline`, `canCancel` and `recipientId`.
 
+### 13. Security tidy-up
+
+The changes that get harder the longer you wait, done early:
+
+- **Money stored as whole cents.** The database used to store amounts as decimals (e.g. `33.33`), which computers can't always represent exactly. Transfers now store `cadAmountCents` and `feeCents` (e.g. `3333`, `67`), and `ugxAmount` as whole shillings. The server converts to dollars only when sending data to the app, so nothing in the app changed. The database change (`prisma/migrations/20261107030000_money_in_cents`) **converts existing transfers** rather than deleting them, and is applied automatically by `start-dev.command`.
+- **Removed the "verify yourself" KYC shortcut.** The original code had `POST /kyc/simulate-verification`, which let any user mark their own identity as verified. The KYC webhook also no longer logs whatever is sent to it, and answers "not set up yet" until a real provider is connected.
+- **Node 22.** Both `package.json` files now target Node 22 (Heroku no longer supports 18).
+
+The rest of the security work is listed in [Before going online](#before-going-online).
+
 ---
 
 ## API reference
@@ -492,6 +503,42 @@ With the app running:
 14. **Emails:** make a transfer and mark it delivered in Owner controls, then check the **Emails** tab for the receipt and the "Money delivered" email.
 15. **Progress tracker:** open a transfer, then in another tab use Owner controls to Simulate payment → Start sending → Mark delivered. The tracker moves along by itself within 15 seconds.
 16. **Send again / Cancel:** on an unpaid transfer, tap **Cancel transfer** (it turns to Cancelled and an email appears in the Emails tab). On any transfer, **Send again** opens Send Money already filled in.
+
+---
+
+## Before going online
+
+A checklist for when the app is hosted for real customers. ☐ = to do.
+
+**Accounts and secrets**
+- ☐ Set a long random `JWT_SECRET` on the server (`openssl rand -hex 32`). Never reuse the local one.
+- ☐ Set `NODE_ENV=production`. This switches off the local developer account (`DEV_ADMIN_*`) and "Simulate payment".
+- ☐ Put only real team emails in `ADMIN_EMAILS`, each with a strong password.
+- ☐ Set `EXPO_PUBLIC_DEMO_MODE=false` only when it's really live (removes the demo banner).
+
+**Security**
+- ☐ **Limit login attempts** (and signup / forgot-password requests) per email and per IP address, so passwords can't be guessed quickly. (Codes are already limited to 5 tries.)
+- ☐ **Restrict which websites can call the server (CORS)** to the app's real web address. It currently accepts any.
+- ☐ **Log out other devices** when a password is changed or reset.
+- ☐ Remove or protect leftover test endpoints (e.g. `/auth/test-verify` from the original code).
+- ☐ Check signatures on every webhook (Stripe already does; a KYC provider would need it too).
+- ☐ Use HTTPS only (hosting services usually handle this).
+
+**Services (owner's decisions)**
+- ☐ Payment method chosen and connected (card, e-Transfer, ...).
+- ☐ Email service set up (`SMTP_*`, `EMAIL_FROM`), ideally from the business's own domain.
+- ☐ Payout method: partner (e.g. Flutterwave) connected, or the manual process agreed.
+- ☐ Real exchange rate, fee and limits saved in Owner controls; network prefixes confirmed.
+- ☐ Identity verification (KYC) decided and connected.
+
+**Data**
+- ☐ Hosted Postgres with automatic backups.
+- ☐ `npx prisma migrate deploy` run on the server (applies all database changes).
+- ☐ Privacy policy and terms of service, checked by the owner.
+
+**Legal (owner)**
+- ☐ Registered as a money services business with FINTRAC, plus any provincial requirements (e.g. Quebec), and compliant with Uganda's rules or through a licensed partner.
+- ☐ If serving Quebec customers: French version of the app.
 
 ---
 
