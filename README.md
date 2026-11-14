@@ -26,7 +26,7 @@ This is a fork of the original MoneyWing project. This README explains how to ru
 
 | Part | Technology | Folder |
 | --- | --- | --- |
-| App (what users see) | React Native + Expo (runs on iPhone, Android and in a web browser) | `frontend/` |
+| App (what users see) | React Native + Expo SDK 58 (runs on iPhone, Android and in a web browser) | `frontend/` |
 | Server | Node.js + Express, written in TypeScript | `backend/` |
 | Database | PostgreSQL, accessed with Prisma | `backend/prisma/` |
 
@@ -394,6 +394,16 @@ All in the developer area's **Transfers** tab.
 **Also fixed:** "Load more" (here and in the customer's Transfer history) could skip transfers created at exactly the same moment. It now uses the transfer id as a tie-breaker.
 
 **Endpoints:** `GET /admin/transactions` now accepts `q`, `status`, `from`, `to`, `before` + `beforeId` and returns `total` and `hasMore`. New: `GET /admin/transactions/export` (same filters, returns the CSV) and `POST /admin/transactions/export` with `{ "ids": [...] }` for selected transfers (up to 1,000). `GET /admin/users` accepts `q` (email search).
+
+### 15. Phone testing
+
+- **The app runs on phones through Expo Go.** See **Testing on a phone** above for the steps.
+- **The app finds the server by itself** (`frontend/constants/config.ts`): on a phone in Expo Go it uses the computer serving the app; in a browser it uses the computer that served the page; `EXPO_PUBLIC_API_URL` in `frontend/.env` overrides both (for an online server).
+- **Spreadsheet export works on phones.** It writes a real `.csv` file and opens the share sheet (Save to Files, Mail, AirDrop). Uses `expo-file-system` and `expo-sharing`. The browser still downloads the file.
+- **Text boxes look the same on every screen.** They have a fixed height, and reset letter spacing and alignment, because phones reuse text boxes between screens and the 6-digit code box's wide style was leaking into other boxes.
+- **The keyboard no longer covers the field** being typed in on iPhone (the page scrolls up).
+- **Sign-up requires a password of at least 8 characters**, in the app and on the server (`POST /auth/signup`), matching change and reset password.
+- Tested on an iPhone 15 with Expo Go and in a laptop browser. Android has not been tested yet.
 
 ---
 
