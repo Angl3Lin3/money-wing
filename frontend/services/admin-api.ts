@@ -1,6 +1,6 @@
 // Calls for the developer area. Uses the developer login, not the customer one.
 import axios from 'axios';
-import { API_BASE_URL } from '../app/constants/config';
+import { API_BASE_URL } from '../constants/config';
 import { getDevToken } from './auth-storage';
 import type { Network, TransactionStatus } from './api';
 

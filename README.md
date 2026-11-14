@@ -135,7 +135,7 @@ The original backend could not start on a normal computer.
 - **Fixed a startup crash:** settings from `.env` were loaded *after* the code that needed them. They now load first (`backend/src/index.ts`).
 - **Stripe keys are optional:** the server used to refuse to start without them. Now it starts and only the payment features are unavailable until keys are added.
 - **Health check:** `GET /` answers `{"status":"ok"}`, so the app's API test screen can confirm the server is running.
-- **The app points at your computer:** `frontend/app/constants/config.ts` uses `http://localhost:3000` instead of the deleted Heroku server.
+- **The app points at your computer:** `frontend/constants/config.ts` uses `http://localhost:3000` instead of the deleted Heroku server.
 - **One-click start and database setup scripts:** `start-dev.command` and `backend/scripts/setup-db.sh`.
 - **`.env.example`:** a template listing every setting.
 

@@ -85,6 +85,10 @@ router.post('/signup', async (req: Request, res: Response) => {
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
+    // Same rule as changing or resetting a password.
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Your password must be at least 8 characters' });
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const existing = await prisma.user.findUnique({ where: { email } });

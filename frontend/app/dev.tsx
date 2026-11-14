@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { AppButton, Badge, Caption, Card, DetailRow, Divider, Loading, Notice, Screen, SectionLabel, TextField, Title } from "../components/ui";
-import { API_BASE_URL } from "./constants/config";
+import { API_BASE_URL } from "../constants/config";
 import { formatCad, formatUgx } from "../constants/format";
 import { formatPhone } from "../constants/networks";
 import { shortReference, STATUS_INFO } from "../constants/status";

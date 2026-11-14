@@ -16,6 +16,11 @@ export default function SignUpScreen() {
       return;
     }
 
+    if (password.length < 8) {
+      showAlert("Password too short", "Your password must be at least 8 characters.");
+      return;
+    }
+
     setLoading(true);
     try {
       await authAPI.signup(email.trim(), password);
@@ -45,6 +50,7 @@ export default function SignUpScreen() {
         <PasswordInput
           label="Password"
           placeholder="Choose a password"
+          hint="At least 8 characters"
           value={password}
           onChangeText={setPassword}
           onSubmitEditing={handleSignUp}

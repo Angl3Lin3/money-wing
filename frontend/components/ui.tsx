@@ -279,6 +279,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: fontSize.base,
     color: colors.text,
+    // Phones reuse text boxes between screens. Without these two lines, the
+    // wide centred style of the 6-digit code box leaks into the next
+    // screen's email and password boxes.
+    letterSpacing: 0,
+    textAlign: "left",
     // remove the browser's own focus outline; the border shows focus instead
     outlineStyle: "none" as any,
   },
