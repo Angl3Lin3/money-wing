@@ -90,6 +90,22 @@ npm install
 npx expo start --web
 ```
 
+### Testing on a phone
+
+1. Install **Expo Go** on the phone (App Store or Google Play).
+2. Put the phone on the **same Wi-Fi** as the computer.
+3. Start everything as above. A QR code appears in the terminal window.
+4. Scan it: iPhone with the Camera app, Android from inside Expo Go.
+
+The app finds the backend by itself: on a phone it talks to the computer that
+is serving the app, on port 3000. If macOS asks whether to allow incoming
+connections for `node`, choose **Allow**. If the app says it can't reach the
+server, check both devices are on the same Wi-Fi (guest and campus networks
+often block devices from seeing each other; a phone hotspot works instead).
+
+To point the app at an online server instead, create `frontend/.env` with
+`EXPO_PUBLIC_API_URL=https://your-server-address` and restart.
+
 ### Seeing what's in the database
 
 ```bash

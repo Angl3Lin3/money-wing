@@ -31,4 +31,10 @@ trap 'kill $BACKEND_PID 2>/dev/null' EXIT
 sleep 3
 echo "▶ Starting app (opens in your browser) ..."
 echo "   Signup codes appear below as a 💸 line."
+LAN_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+if [ -n "$LAN_IP" ]; then
+  echo "   📱 To test on a phone: join the same Wi-Fi as this Mac, open Expo Go"
+  echo "      (iPhone: use the Camera app) and scan the QR code below."
+  echo "      The phone will talk to the backend at http://$LAN_IP:3000"
+fi
 cd frontend && npx expo start --web
