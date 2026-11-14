@@ -45,6 +45,8 @@ The original project ran its server on Heroku. **That Heroku server has been del
 
 ### First-time setup
 
+The start files below do this for you: if `backend/.env` doesn't exist, they ask for the owner email (saved as `ADMIN_EMAILS`) and create the file. To do it by hand instead:
+
 1. Create the backend settings file:
    ```bash
    cd backend
@@ -72,7 +74,13 @@ Keep that Terminal window open while you work, and close it to stop everything. 
 
 > If macOS says it can't open the file, right-click it → **Open** → **Open** (only needed once).
 
-### Starting everything (Windows / manually)
+### Starting everything (Windows)
+
+> **Not tested yet:** `start-dev.bat` was written on a Mac and has not been run on a real Windows computer. If it fails, use **Starting everything manually** below.
+
+Install Node.js and PostgreSQL (the installer from postgresql.org; remember the password you choose), then double-click **`start-dev.bat`** in the main folder. The first time, it asks for the owner email and the PostgreSQL password and creates `backend/.env` for you. It then installs packages, applies database changes, starts the server in a second window, and opens the app in your browser. Close both windows to stop.
+
+### Starting everything manually
 
 Use two terminals:
 

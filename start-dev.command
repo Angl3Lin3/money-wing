@@ -12,6 +12,32 @@ if ! pg_isready -q 2>/dev/null; then
   exit 1
 fi
 
+if ! command -v node >/dev/null 2>&1; then
+  echo "❌ Node.js isn't installed. Download the LTS version from https://nodejs.org,"
+  echo "   install it, then double-click this file again."
+  read -n 1 -s -r -p "Press any key to close..."
+  exit 1
+fi
+
+# First time on this computer: create the settings file (backend/.env).
+if [ ! -f backend/.env ]; then
+  echo "👋 First-time setup: creating the settings file."
+  echo ""
+  echo "   Which email will you use as the owner of the app?"
+  echo "   (Sign up in the app with this same email to open the owner area.)"
+  read -r -p "   Owner email: " OWNER_EMAIL
+  OWNER_EMAIL=$(echo "$OWNER_EMAIL" | tr -d '[:space:]"' | tr '[:upper:]' '[:lower:]')
+  {
+    echo "# Created automatically by start-dev.command. See backend/.env.example for all settings."
+    echo "DATABASE_URL=\"postgresql://$(whoami)@localhost:5432/moneywing\""
+    echo "JWT_SECRET=\"$(openssl rand -hex 32)\""
+    echo "PORT=3000"
+    echo "PAYOUT_PROVIDER=\"mock\""
+    echo "ADMIN_EMAILS=\"$OWNER_EMAIL\""
+  } > backend/.env
+  echo "✅ Settings file created."
+fi
+
 # Install packages when package.json changed (e.g. a new step added one).
 for dir in backend frontend; do
   if [ ! -d "$dir/node_modules" ] || [ "$dir/package.json" -nt "$dir/node_modules/.package-lock.json" ]; then
