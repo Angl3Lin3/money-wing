@@ -28,6 +28,8 @@ export function Screen({ children, center, hideDemoBanner }: { children: ReactNo
         style={styles.screen}
         contentContainerStyle={[styles.screenContent, center && styles.screenCenter]}
         keyboardShouldPersistTaps="handled"
+        // iPhone: scroll the page up so the keyboard doesn't cover the field
+        automaticallyAdjustKeyboardInsets
       >
         <View style={styles.screenInner}>{children}</View>
       </ScrollView>
@@ -267,8 +269,13 @@ const styles = StyleSheet.create({
   inputBoxFocused: { borderColor: colors.focus },
   input: {
     flex: 1,
+    minWidth: 0, // long placeholders shrink instead of pushing the Show button out
+    // A fixed height with no vertical padding lets each platform centre the
+    // typed text and the placeholder itself. Padding-based heights sit the
+    // text too high or too low on phones.
+    height: 50,
     paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
+    paddingVertical: 0,
     fontFamily: fonts.regular,
     fontSize: fontSize.base,
     color: colors.text,

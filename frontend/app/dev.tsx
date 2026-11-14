@@ -441,7 +441,8 @@ function TransfersTab() {
       <Card>
         <TextField
           label="Search"
-          placeholder="Reference (MW-...), email, recipient name or phone"
+          placeholder="Reference, email, name or phone"
+          hint="Reference (MW-...), customer email, recipient name or phone number"
           value={search}
           onChangeText={setSearch}
           autoCapitalize="none"

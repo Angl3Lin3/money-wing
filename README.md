@@ -93,9 +93,18 @@ npx expo start --web
 ### Testing on a phone
 
 1. Install **Expo Go** on the phone (App Store or Google Play).
-2. Put the phone on the **same Wi-Fi** as the computer.
-3. Start everything as above. A QR code appears in the terminal window.
-4. Scan it: iPhone with the Camera app, Android from inside Expo Go.
+2. Create a free Expo account at https://expo.dev/signup. Expo Go needs you
+   to be signed in on both the phone and the computer.
+3. On the computer, sign in once: `cd frontend && npx expo login`
+4. Sign in to Expo Go on the phone with the same account.
+5. Put the phone on the **same Wi-Fi** as the computer.
+6. Start everything as above. A QR code appears in the terminal window.
+7. Scan it: iPhone with the Camera app, Android from inside Expo Go.
+
+The app is built on **Expo SDK 58**, which is what the current Expo Go app
+runs. When Expo Go later updates past it, the phone will say the project is
+incompatible and the project needs upgrading again
+(`npm install expo@latest && npx expo install --fix` in `frontend/`).
 
 The app finds the backend by itself: on a phone it talks to the computer that
 is serving the app, on port 3000. If macOS asks whether to allow incoming

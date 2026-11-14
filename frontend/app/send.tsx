@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import RecipientAvatar from "../components/RecipientAvatar";
 import { AppButton, Caption, Card, DetailRow, Divider, Loading, Screen, SectionLabel, TextLink } from "../components/ui";
 import { formatCad, formatUgx } from "../constants/format";
@@ -203,7 +203,9 @@ const styles = StyleSheet.create({
     height: 56,
     fontFamily: fonts.bold,
     fontSize: fontSize["4xl"],
-    lineHeight: 44,
+    // lineHeight on a phone text box pushes the digits off-centre; the fixed
+    // height centres them. The browser still needs it.
+    ...(Platform.OS === "web" ? { lineHeight: 44 } : null),
     color: colors.text,
     padding: 0,
     outlineStyle: "none" as any,
