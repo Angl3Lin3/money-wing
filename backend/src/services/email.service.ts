@@ -93,6 +93,16 @@ const record = (entry: Omit<OutboxEntry, 'id' | 'time'>) => {
     if (outbox.length > MAX_OUTBOX) outbox.pop();
 };
 
+// Errors worth one more try: network problems, and the email service's
+// "temporary failure" replies (codes 421 and 450-452).
+const TEMPORARY_NETWORK_CODES = ['ECONNECTION', 'ETIMEDOUT', 'ESOCKET', 'ECONNRESET', 'EPIPE', 'EDNS'];
+function isTemporaryEmailError(error: any): boolean {
+    if (error?.code === 'EAUTH' || error?.code === 'EENVELOPE') return false;
+    if (TEMPORARY_NETWORK_CODES.includes(error?.code)) return true;
+    const status = Number(error?.responseCode);
+    return status >= 400 && status < 500;
+}
+
 // Sends an email. Throws if a configured email service refuses it, so callers
 // that MUST deliver (like login codes) can tell the user.
 export async function sendEmail(message: EmailMessage): Promise<void> {
@@ -105,7 +115,18 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     const started = Date.now();
     const seconds = () => ((Date.now() - started) / 1000).toFixed(1);
     try {
-        await getTransporter().sendMail({ from: fromAddress(), ...message });
+        try {
+            await getTransporter().sendMail({ from: fromAddress(), ...message });
+        } catch (firstError: any) {
+            // A brief hiccup (dropped connection, "try again later" from the
+            // email service): wait a second and try once more. Wrong
+            // passwords and rejected addresses are not retried. Skipped if the
+            // first try was already slow, so the app isn't kept waiting.
+            if (!isTemporaryEmailError(firstError) || Date.now() - started > 10_000) throw firstError;
+            console.warn(`Email to ${message.to} failed (${firstError?.message ?? firstError}); trying once more...`);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await getTransporter().sendMail({ from: fromAddress(), ...message });
+        }
         record({ to: message.to, subject: message.subject, status: 'sent' });
         console.log(`📧 Sent "${message.subject}" to ${message.to} in ${seconds()}s`);
     } catch (error: any) {

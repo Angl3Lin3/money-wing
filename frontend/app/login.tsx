@@ -32,7 +32,12 @@ export default function LoginScreen() {
           await authAPI.resendOTP(email.trim());
           router.push({ pathname: "/otp", params: { email: email.trim() } });
         } catch (resendError: any) {
-          showAlert("Error", getErrorMessage(resendError, "Could not send a new code"));
+          // A code was sent less than a minute ago: use that one.
+          if (resendError?.response?.status === 429) {
+            router.push({ pathname: "/otp", params: { email: email.trim() } });
+          } else {
+            showAlert("Error", getErrorMessage(resendError, "Could not send a new code"));
+          }
         }
       } else {
         showAlert("Could not log in", message);

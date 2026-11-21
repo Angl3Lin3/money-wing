@@ -6,6 +6,7 @@ import { fonts } from "../constants/theme";
 import { showAlert } from "../services/alert";
 import { authAPI, getErrorMessage } from "../services/api";
 import { saveToken } from "../services/auth-storage";
+import { useCooldown } from "../hooks/useCooldown";
 
 export default function OTPScreen() {
   const params = useLocalSearchParams();
@@ -13,14 +14,22 @@ export default function OTPScreen() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  // A code was just sent to get here, so the first resend waits 30 seconds.
+  const [secondsLeft, startCooldown] = useCooldown(30);
 
   const resendOtp = async () => {
     setResending(true);
     try {
       await authAPI.resendOTP(email);
+      startCooldown(30);
       showAlert("Code sent", "A new code is on its way.");
     } catch (error: any) {
-      showAlert("Error", getErrorMessage(error, "Could not resend the code"));
+      if (error?.response?.status === 429) {
+        startCooldown(error.response.data?.retryAfterSeconds ?? 30);
+        showAlert("Please wait", getErrorMessage(error, "Please wait before asking for a new code."));
+      } else {
+        showAlert("Error", getErrorMessage(error, "Could not resend the code"));
+      }
     } finally {
       setResending(false);
     }
@@ -64,7 +73,13 @@ export default function OTPScreen() {
         />
         <AppButton title="Verify" onPress={verifyOtp} loading={loading} />
         <Spacer size={10} />
-        <AppButton title="Resend code" variant="ghost" onPress={resendOtp} loading={resending} />
+        <AppButton
+          title={secondsLeft > 0 ? `Resend code in ${secondsLeft}s` : "Resend code"}
+          variant="ghost"
+          onPress={resendOtp}
+          loading={resending}
+          disabled={secondsLeft > 0}
+        />
       </Card>
     </Screen>
   );

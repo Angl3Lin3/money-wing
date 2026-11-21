@@ -54,6 +54,18 @@ const issueCode = async (userId: string, email: string, purpose: CodePurpose): P
 
 const issueOtp = (userId: string, email: string) => issueCode(userId, email, 'signup');
 
+// At most one code every 30 seconds per person and purpose, so the buttons can't be
+// used to flood someone's inbox or use up the daily email allowance.
+const CODE_COOLDOWN_SECONDS = 30;
+const secondsUntilNextCode = async (userId: string, purpose: CodePurpose): Promise<number> => {
+  const last = await prisma.otpToken.findFirst({ where: { userId, purpose }, orderBy: { createdAt: 'desc' } });
+  if (!last) return 0;
+  const elapsed = (Date.now() - last.createdAt.getTime()) / 1000;
+  return Math.max(0, Math.ceil(CODE_COOLDOWN_SECONDS - elapsed));
+};
+const waitMessage = (seconds: number) =>
+  `We just sent you a code. Please wait ${seconds} second${seconds === 1 ? '' : 's'} before asking for a new one.`;
+
 // Checks a code. Returns null if it's right, otherwise the error to show.
 // Wrong tries are counted; the 5th wrong try deletes the code.
 const checkCode = async (token: { id: string; tokenHash: string; expiresAt: Date } | undefined, code: string): Promise<string | null> => {
@@ -106,6 +118,12 @@ router.post('/signup', async (req: Request, res: Response) => {
       ? await prisma.user.update({ where: { id: existing.id }, data: { passwordHash } })
       : await prisma.user.create({ data: { email, passwordHash, status: 'pending' } });
 
+    // Pressing "Create account" twice quickly: the first code is still on its
+    // way, so don't send another. The app moves on to the code screen.
+    if (existing && (await secondsUntilNextCode(user.id, 'signup')) > 0) {
+      return res.status(201).json({ message: 'We already sent you a code. Check your email.', userId: user.id });
+    }
+
     await issueOtp(user.id, email);
 
     res.status(201).json({
@@ -145,6 +163,11 @@ router.post('/resend-otp', async (req: Request, res: Response) => {
     }
     if (user.status === 'closed') {
       return res.status(400).json({ error: CLOSED_MESSAGE });
+    }
+
+    const wait = await secondsUntilNextCode(user.id, 'signup');
+    if (wait > 0) {
+      return res.status(429).json({ error: waitMessage(wait), retryAfterSeconds: wait });
     }
 
     await issueOtp(user.id, email);
@@ -249,9 +272,9 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
             return res.status(200).json(generic);
         }
 
-        // At most one code a minute, so the button can't be used to spam someone.
+        // At most one code every 30 seconds, so the button can't be used to spam someone.
         const last = user.otpTokens[0];
-        if (last && Date.now() - last.createdAt.getTime() < 60 * 1000) {
+        if (last && Date.now() - last.createdAt.getTime() < CODE_COOLDOWN_SECONDS * 1000) {
             return res.status(200).json(generic);
         }
 

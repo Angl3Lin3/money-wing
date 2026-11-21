@@ -6,6 +6,7 @@ import { AppButton, Card, Notice, Screen, Spacer, Subtitle, TextField, TextLink,
 import { fonts } from "../constants/theme";
 import { showAlert } from "../services/alert";
 import { authAPI, getErrorMessage } from "../services/api";
+import { useCooldown } from "../hooks/useCooldown";
 
 // Forgot password: 1) enter email, we email a code; 2) enter code + new password.
 export default function ForgotPasswordScreen() {
@@ -18,6 +19,8 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // One code every 30 seconds (the server enforces it too, without saying so).
+  const [secondsLeft, startCooldown] = useCooldown(0);
 
   const sendCode = async () => {
     setError(null);
@@ -30,6 +33,7 @@ export default function ForgotPasswordScreen() {
       const result = await authAPI.forgotPassword(email.trim());
       setInfo(`${result.message} It expires in 10 minutes.`);
       setStep("reset");
+      startCooldown(30);
     } catch (e: any) {
       setError(getErrorMessage(e, "Could not send a code"));
     } finally {
@@ -104,7 +108,12 @@ export default function ForgotPasswordScreen() {
             <PasswordInput label="Confirm new password" value={confirm} onChangeText={setConfirm} onSubmitEditing={resetPassword} />
             <AppButton title="Set new password" onPress={resetPassword} loading={loading} />
             <Spacer size={10} />
-            <AppButton title="Send a new code" variant="ghost" onPress={sendCode} disabled={loading} />
+            <AppButton
+              title={secondsLeft > 0 ? `Send a new code in ${secondsLeft}s` : "Send a new code"}
+              variant="ghost"
+              onPress={sendCode}
+              disabled={loading || secondsLeft > 0}
+            />
           </>
         )}
       </Card>

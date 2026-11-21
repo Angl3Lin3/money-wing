@@ -83,7 +83,7 @@ SMTP_PASS="<16-letter Gmail app password, no spaces>"
 EMAIL_FROM="MoneyWing <moneywingapp@gmail.com>"
 ```
 
-The app password is created at myaccount.google.com/apppasswords on the Gmail account (2-Step Verification must be on). It is not the normal Gmail password, and it must never be committed. A regular Gmail account can send roughly 500 emails a day; move to a business email service before that becomes a limit. Sending one email can take several seconds, so the app waits up to 30 seconds for the server.
+The app password is created at myaccount.google.com/apppasswords on the Gmail account (2-Step Verification must be on). It is not the normal Gmail password, and it must never be committed. A regular Gmail account can send roughly 500 emails a day; move to a business email service before that becomes a limit. Sending one email can take several seconds, so the app waits up to 30 seconds for the server. If the email service has a brief hiccup, the server tries once more after a second. Codes are limited to one every 30 seconds per person (signup, resend and forgot password), so the buttons can't flood an inbox or use up the daily limit.
 
 > If macOS says it can't open the file, right-click it → **Open** → **Open** (only needed once).
 
