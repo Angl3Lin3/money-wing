@@ -28,7 +28,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         userId = decoded.userId;
     } catch(error) {
         console.error('Authentication error:', error);
-        return res.status(403).json({ error: 'Invalid or expired token'});
+        return res.status(401).json({ error: 'Your session has ended. Please log in again.' });
     }
 
     // A valid token isn't enough: the account must still exist and be open.

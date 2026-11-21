@@ -1,11 +1,13 @@
 import axios from 'axios';
+import { router } from 'expo-router';
 import { API_BASE_URL } from '../constants/config';
-import { getToken } from './auth-storage';
+import { clearToken, getToken } from './auth-storage';
 
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  // Long enough for the server to send an email (e.g. a sign-up code).
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -29,7 +31,19 @@ api.interceptors.request.use(
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    // A saved login that has run out (logins last 7 days) or is no longer
+    // valid: forget it and send the customer to the login screen, instead of
+    // showing an error. Login and signup requests are left alone, so a wrong
+    // password still shows its own message.
+    const url: string = error.config?.url ?? '';
+    const hadToken = Boolean(error.config?.headers?.Authorization);
+    if (error.response?.status === 401 && hadToken && !url.startsWith('/auth/')) {
+      console.warn('Saved login has ended; returning to the login screen.');
+      await clearToken();
+      router.replace('/login');
+      return Promise.reject(error);
+    }
     console.error('API Error:', error.response?.data || error.message);
     return Promise.reject(error);
   }
@@ -125,7 +139,10 @@ export default api;
 // Turns an API/network error into a message worth showing the user.
 export const getErrorMessage = (error: any, fallback = 'Something went wrong'): string => {
   if (error?.response?.data?.error) return error.response.data.error;
-  if (error?.code === 'ECONNABORTED' || error?.message === 'Network Error') {
+  if (error?.code === 'ECONNABORTED') {
+    return 'The server took too long to answer. Please try again in a moment.';
+  }
+  if (error?.message === 'Network Error') {
     return `Can't reach the server at ${API_BASE_URL}. Is the backend running?`;
   }
   return fallback;

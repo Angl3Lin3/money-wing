@@ -70,7 +70,20 @@ Double-click **`start-dev.command`** in the main folder. It:
 3. starts the server on `http://localhost:3000`,
 4. starts the app and opens it in your browser.
 
-Keep that Terminal window open while you work, and close it to stop everything. Until an email service is set up (see [Emails](#11-emails-and-forgot-password)), emails aren't really sent: signup and reset codes appear in this window as a line starting with 💸, and every email can be read in the developer area's **Emails** tab.
+Keep that Terminal window open while you work, and close it to stop everything. If no email service is set up in `backend/.env` (see [Emails](#11-emails-and-forgot-password)), emails aren't really sent: signup and reset codes appear in this window as a line starting with 💸, and every email can be read in the developer area's **Emails** tab.
+
+**Sending real emails with Gmail.** The business address is moneywingapp@gmail.com. Add these to `backend/.env` and restart:
+
+```
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT=587
+SMTP_SECURE="false"
+SMTP_USER="moneywingapp@gmail.com"
+SMTP_PASS="<16-letter Gmail app password, no spaces>"
+EMAIL_FROM="MoneyWing <moneywingapp@gmail.com>"
+```
+
+The app password is created at myaccount.google.com/apppasswords on the Gmail account (2-Step Verification must be on). It is not the normal Gmail password, and it must never be committed. A regular Gmail account can send roughly 500 emails a day; move to a business email service before that becomes a limit. Sending one email can take several seconds, so the app waits up to 30 seconds for the server.
 
 > If macOS says it can't open the file, right-click it → **Open** → **Open** (only needed once).
 
@@ -604,7 +617,7 @@ A checklist for when the app is hosted for real customers. ☐ = to do.
 
 **Services (owner's decisions)**
 - ☐ Payment method chosen and connected (card, e-Transfer, ...).
-- ☐ Email service set up (`SMTP_*`, `EMAIL_FROM`), ideally from the business's own domain.
+- ☐ Email service set up on the server (`SMTP_*`, `EMAIL_FROM`). Gmail (moneywingapp@gmail.com) works for testing and an early launch; for larger volumes use the business's own domain.
 - ☐ Payout method: partner (e.g. Flutterwave) connected, or the manual process agreed.
 - ☐ Real exchange rate, fee and limits saved in Owner controls; network prefixes confirmed.
 - ☐ Identity verification (KYC) decided and connected.
@@ -623,7 +636,7 @@ A checklist for when the app is hosted for real customers. ☐ = to do.
 ## Not done yet
 
 - **Card payment** in the app: the backend endpoint exists, but the app's Pay button is disabled. *Next step.*
-- **Choosing an email service** for real sending (the owner's decision, ideally from the business's own domain). Everything is built; it only needs the `SMTP_` settings.
+- **A business email service** for larger volumes. Real emails already work through Gmail (moneywingapp@gmail.com), which is fine for testing and an early launch.
 - **Real payouts** (Flutterwave). Payouts are simulated.
 - **Identity verification (KYC)** before sending. Currently mocked and not enforced.
 - **Online hosting** (Heroku or similar) so others can use it without running it locally.

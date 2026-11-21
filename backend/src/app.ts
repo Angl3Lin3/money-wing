@@ -17,7 +17,8 @@ const app = express();
 // Middleware 
 app.use(helmet());
 app.use(cors());
-app.use(morgan('combined'));
+// Each request line ends with how long the server took, e.g. "- 230 ms".
+app.use(morgan(':remote-addr ":method :url" :status - :response-time ms'));
 app.use(requestMonitor); // recent requests, shown in the developer area
 
 // Webhook route with raw body parsing - MUST come BEFORE express.json()

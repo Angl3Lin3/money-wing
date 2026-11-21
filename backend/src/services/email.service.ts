@@ -1,3 +1,4 @@
+import { format } from 'util';
 // Sends emails to customers.
 //
 // Two modes, chosen by backend/.env:
@@ -50,6 +51,15 @@ export const emailSetupSummary = () => {
 
 const fromAddress = () => process.env.EMAIL_FROM?.trim() || 'MoneyWing <no-reply@moneywing.local>';
 
+// Step-by-step email log for troubleshooting slow or failing sends.
+function debugLogger() {
+    const started = Date.now();
+    const line = (level: string) => (_meta: unknown, msg: string, ...args: unknown[]) =>
+        console.log(`[email ${((Date.now() - started) / 1000).toFixed(2)}s]${level}`, format(msg, ...args));
+    const quiet = () => {};
+    return { info: line(''), warn: line(' WARN'), error: line(' ERROR'), debug: quiet, trace: quiet, fatal: line(' FATAL'), level: quiet } as any;
+}
+
 function getTransporter(): Transporter {
     const c = smtpConfig();
     // Rebuild the connection whenever any setting changes (password included).
@@ -60,6 +70,18 @@ function getTransporter(): Transporter {
             port: c.port,
             secure: c.secure,
             ...(c.user && { auth: { user: c.user, pass: c.pass } }),
+            // Keep the connection to the email service open between emails,
+            // so only the first one pays the (sometimes slow) connect cost.
+            pool: true,
+            // EMAIL_DEBUG="true" in .env prints each step of talking to the
+            // email service with a timer (never the password).
+            ...(process.env.EMAIL_DEBUG === 'true' && { logger: debugLogger() }),
+            // Give up if the email service can't be reached, so the app shows
+            // an error instead of waiting for minutes. Kept under the app's
+            // 30-second wait.
+            connectionTimeout: 20_000,
+            greetingTimeout: 20_000,
+            socketTimeout: 25_000,
         });
         transporterKey = key;
     }
@@ -80,12 +102,15 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
         return;
     }
 
+    const started = Date.now();
+    const seconds = () => ((Date.now() - started) / 1000).toFixed(1);
     try {
         await getTransporter().sendMail({ from: fromAddress(), ...message });
         record({ to: message.to, subject: message.subject, status: 'sent' });
+        console.log(`📧 Sent "${message.subject}" to ${message.to} in ${seconds()}s`);
     } catch (error: any) {
         record({ to: message.to, subject: message.subject, status: 'failed', error: String(error?.message ?? error).slice(0, 200) });
-        console.error(`Email to ${message.to} failed:`, error?.message ?? error);
+        console.error(`Email to ${message.to} failed after ${seconds()}s:`, error?.message ?? error);
         throw error;
     }
 }
