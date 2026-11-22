@@ -90,7 +90,8 @@ export const userAPI = {
     return response.data;
   },
 
-  changePassword: async (currentPassword: string, newPassword: string) => {
+  // Returns a fresh login token: changing the password logs out other devices.
+  changePassword: async (currentPassword: string, newPassword: string): Promise<{ message: string; token?: string }> => {
     const response = await api.post('/user/change-password', { currentPassword, newPassword });
     return response.data;
   },
@@ -110,19 +111,6 @@ export interface Profile {
   recipientCount: number;
   transferCount: number;
 }
-
-// KYC API calls
-export const kycAPI = {
-  submitKYC: async (data: any) => {
-    const response = await api.post('/kyc/submit', data);
-    return response.data;
-  },
-
-  getKYCStatus: async () => {
-    const response = await api.get('/kyc/status');
-    return response.data;
-  },
-};
 
 // Health check
 export const healthCheck = async () => {

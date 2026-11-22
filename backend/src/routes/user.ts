@@ -1,3 +1,4 @@
+import { generateJWT } from '../utils/jwt';
 import express, { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -58,12 +59,17 @@ router.post('/change-password', authenticateToken, async (req: AuthRequest, res:
             return res.status(400).json({ error: 'Your current password is incorrect' });
         }
 
-        await prisma.user.update({
+        // Raising tokenVersion logs out every other device. This device gets a
+        // fresh login token back so it stays logged in.
+        const updated = await prisma.user.update({
             where: { id: user.id },
-            data: { passwordHash: await bcrypt.hash(newPassword, 12) },
+            data: { passwordHash: await bcrypt.hash(newPassword, 12), tokenVersion: { increment: 1 } },
         });
         sendEmailInBackground(passwordChangedEmail(user.email)); // security alert
-        res.status(200).json({ message: 'Password changed' });
+        res.status(200).json({
+            message: 'Password changed. Other devices have been logged out.',
+            token: generateJWT(updated.id, updated.tokenVersion),
+        });
     } catch (error: any) {
         console.error('Change password error:', error);
         res.status(500).json({ error: 'Could not change the password' });

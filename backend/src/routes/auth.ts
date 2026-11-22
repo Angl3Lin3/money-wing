@@ -5,17 +5,14 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { isEmailConfigured, sendEmail, sendEmailInBackground } from '../services/email.service';
 import { passwordChangedEmail, passwordResetCodeEmail, verificationCodeEmail } from '../services/email.templates';
-import jwt from 'jsonwebtoken';
+import { generateJWT } from '../utils/jwt';
+import { limitAuthRequests, loginBlockedMessage, recordFailedLogin, recordSuccessfulLogin } from '../middleware/rate-limit';
 
 const router = express.Router();
 const prisma = new PrismaClient();
-const generateJWT = (userId: string): string => {
-    const JWT_SECRET = process.env.JWT_SECRET;
-    if(!JWT_SECRET) {
-        throw new Error('JWT_SECRET is not defined in environment variables');
-    }
-    return jwt.sign({ userId}, JWT_SECRET, { expiresIn: '7d'});
-}
+
+// Every sign-in request counts towards a per-network-address limit.
+router.use(limitAuthRequests);
 
 // Generate a random 6-digit OTP
 const generateOTP = (): string => {
@@ -229,7 +226,7 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
         });
 
         // 5. Generate JWT token 
-        const token = generateJWT(user.id);
+        const token = generateJWT(user.id, user.tokenVersion);
 
         // 6. Clean up the used OTP token 
         await prisma.otpToken.deleteMany({ where: { userId: user.id, purpose: 'signup' } });
@@ -312,8 +309,13 @@ router.post('/reset-password', async (req: Request, res: Response) => {
             return res.status(400).json({ error: codeError });
         }
 
-        await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } });
+        // Raising tokenVersion logs out every device that was logged in.
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { passwordHash: await bcrypt.hash(newPassword, 12), tokenVersion: { increment: 1 } },
+        });
         await prisma.otpToken.deleteMany({ where: { userId: user.id, purpose: 'password-reset' } });
+        recordSuccessfulLogin(email); // clear any wrong-password lock
         sendEmailInBackground(passwordChangedEmail(email));
 
         res.status(200).json({ message: 'Password reset. You can log in with your new password.' });
@@ -333,20 +335,30 @@ router.post('/login', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Email and password are required'});
         }
 
+        // Too many wrong passwords recently: wait before trying again.
+        const ip = req.ip ?? 'unknown';
+        const blocked = loginBlockedMessage(email, ip);
+        if (blocked) {
+            return res.status(429).json({ error: blocked });
+        }
+
         // 1. Find the user 
         const user = await prisma.user.findUnique({
             where: { email },
         });
 
         if(!user) {
+            recordFailedLogin(email, ip);
             return res.status(400).json({ error: 'Invalid email or password'});
         }
 
         // 2. Verify password 
-        const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+        const isPasswordValid = typeof password === 'string' && await bcrypt.compare(password, user.passwordHash);
         if (!isPasswordValid) {
+            recordFailedLogin(email, ip);
             return res.status(400).json({ error: 'Invalid email or password'});
         }
+        recordSuccessfulLogin(email);
 
         // 3. Check if user is verified 
         if (user.status === 'closed') {
@@ -357,7 +369,7 @@ router.post('/login', async (req: Request, res: Response) => {
         }
 
         // 4. Generate JWT token 
-        const token = generateJWT(user.id);
+        const token = generateJWT(user.id, user.tokenVersion);
 
         // 5. Respond with success 
         res.status(200).json({

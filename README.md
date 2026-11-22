@@ -426,6 +426,13 @@ All in the developer area's **Transfers** tab.
 - **Sign-up requires a password of at least 8 characters**, in the app and on the server (`POST /auth/signup`), matching change and reset password.
 - Tested on an iPhone 15 with Expo Go and in a laptop browser. Android has not been tested yet.
 
+### 16. Security before handover
+
+- **Login attempts are limited.** After 5 wrong passwords for one email (or 20 from one network address) the app says to wait 15 minutes or use Forgot password. All sign-in requests are also limited to 60 per address per 10 minutes. See `backend/src/middleware/rate-limit.ts`.
+- **Changing or resetting a password logs out every other device.** Each login token carries the account's `tokenVersion` (new database column, migration `20261122180000_token_version`); a password change raises it. The device that changed the password gets a fresh token and stays logged in.
+- **Which websites may call the server is configurable** with `CORS_ORIGINS` (see Configuration). The phone app is never blocked.
+- **Leftover test code removed**: unused app calls to KYC routes that don't exist. (`/auth/test-verify` and the KYC "simulate verification" shortcut were already removed earlier.)
+
 ---
 
 ## API reference
@@ -481,6 +488,9 @@ The settings file is `backend/.env`. **It holds secrets and is never committed t
 | `DEV_ADMIN_EMAIL` / `DEV_ADMIN_PASSWORD` | | | Local only: auto-created developer account |
 | `STRIPE_SECRET_KEY` | For payments | | Stripe test key (`sk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | For payments | | Stripe webhook secret (`whsec_...`) |
+| `CORS_ORIGINS` | In production | (any website while developing) | Comma-separated websites allowed to call the server from a browser, e.g. `https://app.moneywingapp.com` |
+| `TRUST_PROXY` | On most hosts | | Set to `1` behind a hosting service's proxy so login limits see real visitor addresses |
+| `EMAIL_DEBUG` | No | `false` | `true` prints each step of sending an email with a timer |
 
 The server restarts by itself when you save `.env` or any backend file.
 
@@ -608,10 +618,10 @@ A checklist for when the app is hosted for real customers. ☐ = to do.
 - ☐ Set `EXPO_PUBLIC_DEMO_MODE=false` only when it's really live (removes the demo banner).
 
 **Security**
-- ☐ **Limit login attempts** (and signup / forgot-password requests) per email and per IP address, so passwords can't be guessed quickly. (Codes are already limited to 5 tries.)
-- ☐ **Restrict which websites can call the server (CORS)** to the app's real web address. It currently accepts any.
-- ☐ **Log out other devices** when a password is changed or reset.
-- ☐ Remove or protect leftover test endpoints (e.g. `/auth/test-verify` from the original code).
+- ☑ **Login attempts are limited**: 5 wrong passwords per email or 20 per network address in 15 minutes, and 60 sign-in requests per address in 10 minutes. Codes allow 5 tries. On a host behind a proxy, set `TRUST_PROXY=1` so the limits see real addresses. (The limits live in memory: fine for one server; several servers would need a shared store such as Redis.)
+- ☐ **Set `CORS_ORIGINS`** to the app's real web address. While developing, any website may call the server; in production, none can until this is set. The phone app is never affected.
+- ☑ **Other devices are logged out** when a password is changed or reset.
+- ☑ Leftover test endpoints removed (`/auth/test-verify`, the KYC "simulate verification" shortcut, and unused app calls to KYC routes that don't exist). "Simulate payment" and the local developer account switch off automatically with `NODE_ENV=production`.
 - ☐ Check signatures on every webhook (Stripe already does; a KYC provider would need it too).
 - ☐ Use HTTPS only (hosting services usually handle this).
 

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import { verifyJWT } from '../utils/jwt';
 import { PrismaClient } from '@prisma/client';
 
 export interface AuthRequest extends Request {
@@ -11,6 +11,7 @@ const prisma = new PrismaClient();
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     let userId: string;
+    let tokenVersion: number;
     try {
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
@@ -19,23 +20,21 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             return res.status(401).json({ error: 'Access token required'});
         }
 
-        const JWT_SECRET = process.env.JWT_SECRET;
-        if(!JWT_SECRET) {
-            throw new Error('JWT_SECRET is not defined');
-        }
-
-        const decoded = jwt.verify(token, JWT_SECRET) as { userId: string};
+        const decoded = verifyJWT(token);
         userId = decoded.userId;
+        tokenVersion = decoded.v ?? 0;
     } catch(error) {
-        console.error('Authentication error:', error);
+        console.warn('Login token rejected:', (error as Error)?.message ?? error);
         return res.status(401).json({ error: 'Your session has ended. Please log in again.' });
     }
 
     // A valid token isn't enough: the account must still exist and be open.
     // (Logins last 7 days, so a deleted or closed account could otherwise keep using one.)
     try {
-        const user = await prisma.user.findUnique({ where: { id: userId }, select: { status: true } });
-        if (!user || user.status === 'closed') {
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { status: true, tokenVersion: true } });
+        // tokenVersion differs = the password was changed or reset since this
+        // login was made, so this device has been logged out.
+        if (!user || user.status === 'closed' || user.tokenVersion !== tokenVersion) {
             return res.status(401).json({ error: 'Your session has ended. Please log in again.' });
         }
     } catch (error) {

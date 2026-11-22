@@ -6,7 +6,7 @@ import { AppButton, Body, Caption, Card, DetailRow, Loading, Notice, Screen, Sec
 import { colors, fonts, fontSize, spacing } from "../constants/theme";
 import { confirmAction, showAlert } from "../services/alert";
 import { getErrorMessage, Profile, userAPI } from "../services/api";
-import { clearToken } from "../services/auth-storage";
+import { clearToken, saveToken } from "../services/auth-storage";
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -55,8 +55,10 @@ export default function ProfileScreen() {
 
     setChanging(true);
     try {
-      await userAPI.changePassword(currentPassword, newPassword);
-      setPasswordMessage({ tone: "success", text: "Password changed. Use it next time you log in." });
+      const result = await userAPI.changePassword(currentPassword, newPassword);
+      // Keep this device logged in with the new login token.
+      if (result.token) await saveToken(result.token);
+      setPasswordMessage({ tone: "success", text: "Password changed. Any other devices have been logged out." });
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
