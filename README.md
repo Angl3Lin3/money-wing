@@ -433,6 +433,13 @@ All in the developer area's **Transfers** tab.
 - **Which websites may call the server is configurable** with `CORS_ORIGINS` (see Configuration). The phone app is never blocked.
 - **Leftover test code removed**: unused app calls to KYC routes that don't exist. (`/auth/test-verify` and the KYC "simulate verification" shortcut were already removed earlier.)
 
+### 17. Tidy-up for handover
+
+- **Removed Expo's starter-template leftovers** that the app never used: example components, React logo images, the `reset-project` script, an unused colour file, and eight unused packages (haptics, blur, symbols, tab and stack navigation, web view, web browser, image).
+- **The app is named MoneyWing** (`app.json`: name, `moneywing` slug and link scheme), and uses the MoneyWing wing for its icon, Android icon and browser tab icon, with the full logo on the splash screen.
+- **New "page not found" screen** in the app's own style.
+- `frontend/README.md` now points to this README instead of Expo's template text.
+
 ---
 
 ## API reference
@@ -557,7 +564,8 @@ money-wing/
     │   ├── profile.tsx          ★ your account, password, delete account
     │   ├── dev-login.tsx        ★ developer area login
     │   ├── dev.tsx              ★ developer area + owner controls
-    │   └── api-test.tsx           (now redirects to the developer area)
+    │   ├── api-test.tsx           (now redirects to the developer area)
+    │   └── +not-found.tsx       ★ shown for an address the app doesn't have
     ├── components/
     │   ├── ui.tsx               ★ buttons, inputs, cards, text styles
     │   ├── ProgressTracker.tsx  ★ step-by-step transfer progress
@@ -570,7 +578,10 @@ money-wing/
     │   ├── format.ts            ★ $1,234.50 and 274,400 UGX formatting
     │   ├── networks.ts          ★ MTN/Airtel detection, phone formatting
     │   ├── status.ts            ★ status labels and colours
-    │   └── demo.ts              ★ demo mode switch
+    │   ├── demo.ts              ★ demo mode switch
+    │   └── config.ts            ★ where the app finds the server
+    ├── hooks/
+    │   └── useCooldown.ts       ★ countdown on "Send a new code" buttons
     └── services/
         ├── api.ts                 all calls to the server
         ├── admin-api.ts         ★ calls for the developer area

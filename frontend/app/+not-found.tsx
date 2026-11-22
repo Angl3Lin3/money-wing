@@ -1,32 +1,16 @@
-import { Link, Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { router, Stack } from "expo-router";
+import { AppButton, Card, Screen, Subtitle, Title } from "../components/ui";
 
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-
+// Shown when someone opens an address the app doesn't have.
 export default function NotFoundScreen() {
   return (
-    <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
-      <ThemedView style={styles.container}>
-        <ThemedText type="title">This screen does not exist.</ThemedText>
-        <Link href="/" style={styles.link}>
-          <ThemedText type="link">Go to home screen!</ThemedText>
-        </Link>
-      </ThemedView>
-    </>
+    <Screen center hideDemoBanner>
+      <Stack.Screen options={{ title: "Page not found" }} />
+      <Title center>We couldn't find that page</Title>
+      <Subtitle center>The link may be old or mistyped.</Subtitle>
+      <Card>
+        <AppButton title="Go to the home screen" onPress={() => router.replace("/")} />
+      </Card>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-});
